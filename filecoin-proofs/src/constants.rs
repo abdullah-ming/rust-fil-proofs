@@ -13,6 +13,11 @@ pub const SECTOR_SIZE_8_MIB: u64 = 1 << 23;
 pub const SECTOR_SIZE_512_MIB: u64 = 1 << 29;
 pub const SECTOR_SIZE_32_GIB: u64 = 1 << 35;
 
+pub const SECTOR_SIZE_4_KIB: u64 = 2 * SECTOR_SIZE_2_KIB;
+pub const SECTOR_SIZE_16_MIB: u64 = 2 * SECTOR_SIZE_8_MIB;
+pub const SECTOR_SIZE_1_GIB: u64 = 2 * SECTOR_SIZE_512_MIB;
+pub const SECTOR_SIZE_64_GIB: u64 = 2 * SECTOR_SIZE_32_GIB;
+
 pub const ELECTION_POST_CHALLENGE_COUNT: usize = 65;
 pub const ELECTION_POST_CHALLENGED_NODES: usize = 1;
 
@@ -30,9 +35,13 @@ lazy_static! {
     pub static ref POREP_MINIMUM_CHALLENGES: RwLock<HashMap<u64, u64>> = RwLock::new(
         [
             (SECTOR_SIZE_2_KIB, 2),
+            (SECTOR_SIZE_4_KIB, 2),
             (SECTOR_SIZE_8_MIB, 2),
+            (SECTOR_SIZE_16_MIB, 2),
             (SECTOR_SIZE_512_MIB, 2),
-            (SECTOR_SIZE_32_GIB, 138)
+            (SECTOR_SIZE_1_GIB, 2),
+            (SECTOR_SIZE_32_GIB, 138),
+            (SECTOR_SIZE_64_GIB, 138),
         ]
         .iter()
         .copied()
@@ -41,9 +50,13 @@ lazy_static! {
     pub static ref POREP_PARTITIONS: RwLock<HashMap<u64, u8>> = RwLock::new(
         [
             (SECTOR_SIZE_2_KIB, 1),
+            (SECTOR_SIZE_4_KIB, 1),
             (SECTOR_SIZE_8_MIB, 1),
+            (SECTOR_SIZE_16_MIB, 1),
             (SECTOR_SIZE_512_MIB, 1),
-            (SECTOR_SIZE_32_GIB, 9)
+            (SECTOR_SIZE_1_GIB, 1),
+            (SECTOR_SIZE_32_GIB, 9),
+            (SECTOR_SIZE_64_GIB, 9),
         ]
         .iter()
         .copied()
@@ -52,9 +65,13 @@ lazy_static! {
     pub static ref LAYERS: RwLock<HashMap<u64, usize>> = RwLock::new(
         [
             (SECTOR_SIZE_2_KIB, 1),
+            (SECTOR_SIZE_4_KIB, 1),
             (SECTOR_SIZE_8_MIB, 2),
+            (SECTOR_SIZE_16_MIB, 2),
             (SECTOR_SIZE_512_MIB, 2),
-            (SECTOR_SIZE_32_GIB, 11)
+            (SECTOR_SIZE_1_GIB, 2),
+            (SECTOR_SIZE_32_GIB, 11),
+            (SECTOR_SIZE_64_GIB, 11),
         ]
         .iter()
         .copied()
