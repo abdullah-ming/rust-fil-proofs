@@ -1,6 +1,5 @@
 use clap::{values_t, App, Arg};
 use log::info;
-use paired::bls12_381::Bls12;
 use rand::rngs::OsRng;
 
 use filecoin_proofs::constants::*;
@@ -39,7 +38,6 @@ fn cache_porep_params(porep_config: PoRepConfig) {
 
     {
         let circuit = <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
@@ -50,7 +48,6 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     }
     {
         let circuit = <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
@@ -63,7 +60,6 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     }
     {
         let circuit = <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
@@ -87,11 +83,10 @@ fn cache_election_post_params(post_config: &PoStConfig) {
     let post_public_params = election_post_public_params(post_config).unwrap();
 
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, DefaultTreeHasher> =
+        let post_circuit: ElectionPoStCircuit<DefaultTreeHasher> =
             <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
                 ElectionPoSt<DefaultTreeHasher>,
-                ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
+                ElectionPoStCircuit<DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
         let _ = <ElectionPoStCompound<DefaultTreeHasher>>::get_param_metadata(
             post_circuit,
@@ -100,11 +95,10 @@ fn cache_election_post_params(post_config: &PoStConfig) {
         .expect("failed to get metadata");
     }
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, DefaultTreeHasher> =
+        let post_circuit: ElectionPoStCircuit<DefaultTreeHasher> =
             <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
                 ElectionPoSt<DefaultTreeHasher>,
-                ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
+                ElectionPoStCircuit<DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
         <ElectionPoStCompound<DefaultTreeHasher>>::get_groth_params(
             Some(&mut OsRng),
@@ -114,11 +108,10 @@ fn cache_election_post_params(post_config: &PoStConfig) {
         .expect("failed to get groth params");
     }
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, DefaultTreeHasher> =
+        let post_circuit: ElectionPoStCircuit<DefaultTreeHasher> =
             <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
                 ElectionPoSt<DefaultTreeHasher>,
-                ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
+                ElectionPoStCircuit<DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
 
         <ElectionPoStCompound<DefaultTreeHasher>>::get_verifying_key(
