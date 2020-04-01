@@ -4,7 +4,7 @@ use anyhow::ensure;
 use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
 use bellperson::gadgets::{multipack, num};
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use generic_array::typenum;
+use generic_array::typenum::{self, Unsigned};
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
@@ -13,8 +13,8 @@ use crate::error::Result;
 use crate::gadgets::constraint;
 use crate::gadgets::insertion::insert;
 use crate::gadgets::variables::Root;
-use crate::hasher::{HashFunction, Hasher, PoseidonArity};
-use crate::merkle::MerkleProofTrait;
+use crate::hasher::{HashFunction, Hasher};
+use crate::merkle::{MerkleProofTrait, MerkleTreeTrait};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por::PoR;
 use crate::proof::ProofScheme;
@@ -28,29 +28,21 @@ use crate::proof::ProofScheme;
 /// * `auth_path` - The authentication path of the leaf in the tree.
 /// * `root` - The merkle root of the tree.
 ///
-pub struct PoRCircuit<U, H: Hasher>
-where
-    U: 'static + PoseidonArity,
-{
+pub struct PoRCircuit<Tree: MerkleTreeTrait> {
     value: Root<Bls12>,
     #[allow(clippy::type_complexity)]
     auth_path: Vec<(Vec<Option<Fr>>, Option<usize>)>,
     root: Root<Bls12>,
     private: bool,
-    _h: PhantomData<H>,
-    _u: PhantomData<U>,
+    _tree: PhantomData<Tree>,
 }
 
-impl<U, H: Hasher> CircuitComponent for PoRCircuit<U, H>
-where
-    U: PoseidonArity,
-{
+impl<Tree: MerkleTreeTrait> CircuitComponent for PoRCircuit<Tree> {
     type ComponentPrivateInputs = Option<Root<Bls12>>;
 }
 
-pub struct PoRCompound<H: Hasher, U: typenum::Unsigned> {
-    _h: PhantomData<H>,
-    _u: PhantomData<U>,
+pub struct PoRCompound<Tree: MerkleTreeTrait> {
+    _tree: PhantomData<Tree>,
 }
 
 pub fn challenge_into_auth_path_bits<U: typenum::Unsigned>(
@@ -79,19 +71,17 @@ pub fn challenge_into_auth_path_bits<U: typenum::Unsigned>(
     bits
 }
 
-impl<C: Circuit<Bls12>, P: ParameterSetMetadata, H: Hasher, U: typenum::Unsigned>
-    CacheableParameters<C, P> for PoRCompound<H, U>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheableParameters<C, P>
+    for PoRCompound<Tree>
 {
     fn cache_prefix() -> String {
-        format!("proof-of-retrievability-{}-{}", H::name(), U::to_usize())
+        format!("proof-of-retrievability-{}", Tree::display())
     }
 }
 
 // can only implment for Bls12 because por is not generic over the engine.
-impl<'a, H, U> CompoundProof<'a, PoR<H, U>, PoRCircuit<U, H>> for PoRCompound<H, U>
-where
-    H: 'a + Hasher,
-    U: 'static + PoseidonArity,
+impl<'a, Tree: 'a + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircuit<Tree>>
+    for PoRCompound<Tree>
 {
     fn circuit<'b>(
         public_inputs: &<PoR<H, U> as ProofScheme<'a>>::PublicInputs,
@@ -110,39 +100,37 @@ where
             "Inputs must be consistent with public params"
         );
 
-        Ok(PoRCircuit::<U, H> {
+        Ok(PoRCircuit::<Tree> {
             value: Root::Val(Some(proof.data.into())),
             auth_path: proof.proof.as_options(),
             root,
             private,
-            _h: PhantomData,
-            _u: PhantomData,
+            _tree: PhantomData,
         })
     }
 
     fn blank_circuit(
-        public_params: &<PoR<H, U> as ProofScheme<'a>>::PublicParams,
-    ) -> PoRCircuit<U, H> {
-        PoRCircuit::<U, H> {
+        public_params: &<PoR<Tree> as ProofScheme<'a>>::PublicParams,
+    ) -> PoRCircuit<Tree> {
+        PoRCircuit::<Tree> {
             value: Root::Val(None),
             auth_path: vec![
-                (vec![None; U::to_usize() - 1], None);
-                graph_height::<U>(public_params.leaves) - 1
+                (vec![None; Tree::Arity::to_usize() - 1], None);
+                graph_height::<Tree::Arity>(public_params.leaves) - 1
             ],
             root: Root::Val(None),
             private: public_params.private,
-            _h: PhantomData,
-            _u: PhantomData,
+            _tree: PhantomData,
         }
     }
 
     fn generate_public_inputs(
-        pub_inputs: &<PoR<H, U> as ProofScheme<'a>>::PublicInputs,
-        pub_params: &<PoR<H, U> as ProofScheme<'a>>::PublicParams,
+        pub_inputs: &<PoR<Tree> as ProofScheme<'a>>::PublicInputs,
+        pub_params: &<PoR<Tree> as ProofScheme<'a>>::PublicParams,
         _k: Option<usize>,
     ) -> Result<Vec<Fr>> {
         let auth_path_bits =
-            challenge_into_auth_path_bits::<U>(pub_inputs.challenge, pub_params.leaves);
+            challenge_into_auth_path_bits::<Tree::Arity>(pub_inputs.challenge, pub_params.leaves);
         let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
 
         let mut inputs = Vec::new();
@@ -159,10 +147,7 @@ where
     }
 }
 
-impl<'a, U, H: Hasher> Circuit<Bls12> for PoRCircuit<U, H>
-where
-    U: PoseidonArity,
-{
+impl<'a, Tree: MerkleTreeTrait> Circuit<Bls12> for PoRCircuit<Tree> {
     /// # Public Inputs
     ///
     /// This circuit expects the following public inputs.
@@ -179,7 +164,7 @@ where
         let auth_path = self.auth_path;
         let root = self.root;
 
-        let arity = U::to_usize();
+        let arity = Tree::Arity::to_usize();
         assert_eq!(1, arity.count_ones());
         let log_arity = arity.trailing_zeros() as usize;
 
@@ -221,7 +206,7 @@ where
                 let inserted = insert(cs, &cur, &index_bits, &path_elements)?;
 
                 // Compute the new subtree value
-                cur = H::Function::hash_multi_leaf_circuit::<U, _>(
+                cur = <Tree::Hasher as Hasher>::Function::hash_multi_leaf_circuit::<Tree::Arity, _>(
                     cs.namespace(|| "computation of commitment hash"),
                     &inserted,
                     i,
@@ -247,10 +232,7 @@ where
     }
 }
 
-impl<'a, U, H: Hasher> PoRCircuit<U, H>
-where
-    U: 'static + PoseidonArity,
-{
+impl<'a, Tree: MerkleTreeTrait> PoRCircuit<Tree> {
     #[allow(clippy::type_complexity)]
     pub fn synthesize<CS>(
         mut cs: CS,
@@ -262,13 +244,12 @@ where
     where
         CS: ConstraintSystem<Bls12>,
     {
-        let por = PoRCircuit::<U, H> {
+        let por = Self {
             value,
             auth_path,
             root,
             private,
-            _h: PhantomData,
-            _u: PhantomData,
+            _tree: PhantomData,
         };
 
         por.synthesize(&mut cs)
@@ -292,10 +273,13 @@ mod tests {
     use crate::hasher::{
         Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher,
     };
-    use crate::merkle::MerkleProofTrait;
+    use crate::merkle::{BinaryTree, DiskStore, MerkleProofTrait, MerkleTreeWrapper};
     use crate::por;
     use crate::proof::ProofScheme;
     use crate::util::data_at_node;
+
+    type TestTree<H, A> =
+        MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, A, typenum::U0, typenum::U0>;
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
@@ -307,7 +291,9 @@ mod tests {
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
         let graph = BucketGraph::<PedersenHasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
+        let tree = graph
+            .merkle_tree::<BinaryTree<PedersenHasher>>(None, data.as_slice())
+            .unwrap();
 
         let public_inputs = por::PublicInputs {
             challenge: 2,
@@ -323,22 +309,22 @@ mod tests {
             priority: false,
         };
         let public_params =
-            PoRCompound::<PedersenHasher, typenum::U2>::setup(&setup_params).expect("setup failed");
+            PoRCompound::<BinaryTree<PedersenHasher>>::setup(&setup_params).expect("setup failed");
 
-        let private_inputs = por::PrivateInputs::<PedersenHasher, typenum::U2>::new(
+        let private_inputs = por::PrivateInputs::<BinaryTree<PedersenHasher>>::new(
             bytes_into_fr(data_at_node(data.as_slice(), public_inputs.challenge).unwrap())
                 .expect("failed to create Fr from node data")
                 .into(),
             &tree,
         );
 
-        let gparams = PoRCompound::<PedersenHasher, typenum::U2>::groth_params(
+        let gparams = PoRCompound::<BinaryTree<PedersenHasher>>::groth_params(
             Some(rng),
             &public_params.vanilla_params,
         )
         .expect("failed to generate groth params");
 
-        let proof = PoRCompound::<PedersenHasher, typenum::U2>::prove(
+        let proof = PoRCompound::<BinaryTree<PedersenHasher>>::prove(
             &public_params,
             &public_inputs,
             &private_inputs,
@@ -346,7 +332,7 @@ mod tests {
         )
         .expect("failed while proving");
 
-        let verified = PoRCompound::<PedersenHasher, typenum::U2>::verify(
+        let verified = PoRCompound::<BinaryTree<PedersenHasher>>::verify(
             &public_params,
             &public_inputs,
             &proof,
@@ -355,7 +341,7 @@ mod tests {
         .expect("failed while verifying");
         assert!(verified);
 
-        let (circuit, inputs) = PoRCompound::<PedersenHasher, typenum::U2>::circuit_for_test(
+        let (circuit, inputs) = PoRCompound::<BinaryTree<PedersenHasher>>::circuit_for_test(
             &public_params,
             &public_inputs,
             &private_inputs,
@@ -371,71 +357,68 @@ mod tests {
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen_binary() {
-        test_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U2>(8_247);
+        test_por_input_circuit_with_bls12_381::<TestTree<PedersenHasher, typenum::U2>>(8_247);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_blake2s_binary() {
-        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U2>(129_135);
+        test_por_input_circuit_with_bls12_381::<TestTree<Blake2sHasher, typenum::U2>>(129_135);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_sha256_binary() {
-        test_por_input_circuit_with_bls12_381::<Sha256Hasher, typenum::U2>(272_295);
+        test_por_input_circuit_with_bls12_381::<TestTree<Sha256Hasher, typenum::U2>>(272_295);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_poseidon_binary() {
-        test_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U2>(1_905);
+        test_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U2>>(1_905);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen_quad() {
-        test_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U4>(12_411);
+        test_por_input_circuit_with_bls12_381::<TestTree<PedersenHasher, typenum::U4>>(12_411);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_blake2s_quad() {
-        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U4>(130_308);
+        test_por_input_circuit_with_bls12_381::<TestTree<Blake2sHasher, typenum::U4>>(130_308);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_sha256_quad() {
-        test_por_input_circuit_with_bls12_381::<Sha256Hasher, typenum::U4>(216_270);
+        test_por_input_circuit_with_bls12_381::<TestTree<Sha256Hasher, typenum::U4>>(216_270);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_poseidon_quad() {
-        test_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U4>(1_185);
+        test_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U4>>(1_185);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen_oct() {
-        test_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U8>(19_357);
+        test_por_input_circuit_with_bls12_381::<TestTree<PedersenHasher, typenum::U8>>(19_357);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_blake2s_oct() {
-        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U8>(174_571);
+        test_por_input_circuit_with_bls12_381::<TestTree<Blake2sHasher, typenum::U8>>(174_571);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_sha256_oct() {
-        test_por_input_circuit_with_bls12_381::<Sha256Hasher, typenum::U8>(251_055);
+        test_por_input_circuit_with_bls12_381::<TestTree<Sha256Hasher, typenum::U8>>(251_055);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_poseidon_oct() {
-        test_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U8>(1_137);
+        test_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U8>>(1_137);
     }
 
-    fn test_por_input_circuit_with_bls12_381<H: Hasher, U>(num_constraints: usize)
-    where
-        U: 'static + PoseidonArity,
-    {
+    fn test_por_input_circuit_with_bls12_381<Tree: MerkleTreeTrait>(num_constraints: usize) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let arity = U::to_usize();
+        let arity = Tree::Arity::to_usize();
         assert_eq!(1, arity.count_ones());
 
         // Ensure arity will evenly fill tree.
@@ -448,8 +431,9 @@ mod tests {
                 .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
                 .collect();
 
-            let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-            let tree = graph.merkle_tree::<U>(None, data.as_slice()).unwrap();
+            let graph =
+                BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
+            let tree = graph.merkle_tree::<Tree>(None, data.as_slice()).unwrap();
 
             // -- PoR
 
@@ -457,13 +441,13 @@ mod tests {
                 leaves,
                 private: true,
             };
-            let pub_inputs = por::PublicInputs::<H::Domain> {
+            let pub_inputs = por::PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
                 challenge: i,
                 commitment: Some(tree.root()),
             };
 
-            let priv_inputs = por::PrivateInputs::<H, U>::new(
-                H::Domain::try_from_bytes(
+            let priv_inputs = por::PrivateInputs::<Tree>::new(
+                <Tree::Hasher as Hasher>::Domain::try_from_bytes(
                     data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
                 )
                 .unwrap(),
@@ -471,24 +455,23 @@ mod tests {
             );
 
             // create a non circuit proof
-            let proof = por::PoR::<H, U>::prove(&pub_params, &pub_inputs, &priv_inputs)
+            let proof = por::PoR::<Tree>::prove(&pub_params, &pub_inputs, &priv_inputs)
                 .expect("proving failed");
 
             // make sure it verifies
-            let is_valid = por::PoR::<H, U>::verify(&pub_params, &pub_inputs, &proof)
+            let is_valid = por::PoR::<Tree>::verify(&pub_params, &pub_inputs, &proof)
                 .expect("verification failed");
             assert!(is_valid, "failed to verify por proof");
 
             // -- Circuit
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
-            let por = PoRCircuit::<U, H> {
+            let por = PoRCircuit::<Tree> {
                 value: Root::Val(Some(proof.data.into())),
                 auth_path: proof.proof.as_options(),
                 root: Root::Val(Some(pub_inputs.commitment.unwrap().into())),
                 private: false,
-                _h: PhantomData,
-                _u: PhantomData,
+                _tree: PhantomData,
             };
 
             por.synthesize(&mut cs).expect("circuit synthesis failed");
@@ -501,8 +484,10 @@ mod tests {
                 "wrong number of constraints"
             );
 
-            let auth_path_bits =
-                challenge_into_auth_path_bits::<U>(pub_inputs.challenge, pub_params.leaves);
+            let auth_path_bits = challenge_into_auth_path_bits::<Tree::Arity>(
+                pub_inputs.challenge,
+                pub_params.leaves,
+            );
             let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
 
             let mut expected_inputs = Vec::new();
@@ -531,39 +516,36 @@ mod tests {
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn test_private_por_compound_pedersen_binary() {
-        private_por_test_compound::<PedersenHasher, typenum::U2>();
+        private_por_test_compound::<TestTree<PedersenHasher, typenum::U2>>();
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn test_private_por_compound_poseidon_binary() {
-        private_por_test_compound::<PoseidonHasher, typenum::U2>();
+        private_por_test_compound::<TestTree<PoseidonHasher, typenum::U2>>();
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn test_private_por_compound_pedersen_quad() {
-        private_por_test_compound::<PedersenHasher, typenum::U4>();
+        private_por_test_compound::<TestTree<PedersenHasher, typenum::U4>>();
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn test_private_por_compound_poseidon_quad() {
-        private_por_test_compound::<PoseidonHasher, typenum::U4>();
+        private_por_test_compound::<TestTree<PoseidonHasher, typenum::U4>>();
     }
 
-    fn private_por_test_compound<H: Hasher, U>()
-    where
-        U: 'static + PoseidonArity,
-    {
+    fn private_por_test_compound<Tree: MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let leaves = 64; // good for 2, 4 and 8
 
         let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
-        let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
+        let graph = BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
+        let tree = graph.merkle_tree::<Tree>(None, data.as_slice()).unwrap();
 
         for i in 0..3 {
             let public_inputs = por::PublicInputs {
@@ -579,9 +561,9 @@ mod tests {
                 partitions: None,
                 priority: false,
             };
-            let public_params = PoRCompound::<H, U>::setup(&setup_params).expect("setup failed");
+            let public_params = PoRCompound::<Tree>::setup(&setup_params).expect("setup failed");
 
-            let private_inputs = por::PrivateInputs::<H, U>::new(
+            let private_inputs = por::PrivateInputs::<Tree>::new(
                 bytes_into_fr(data_at_node(data.as_slice(), public_inputs.challenge).unwrap())
                     .expect("failed to create Fr from node data")
                     .into(),
@@ -615,7 +597,7 @@ mod tests {
                     PoRCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
                         .unwrap();
                 let blank_circuit =
-                    PoRCompound::<H, U>::blank_circuit(&public_params.vanilla_params);
+                    PoRCompound::<Tree>::blank_circuit(&public_params.vanilla_params);
 
                 let mut cs_blank = MetricCS::new();
                 blank_circuit
@@ -634,7 +616,7 @@ mod tests {
             }
 
             let blank_groth_params =
-                PoRCompound::<H, U>::groth_params(Some(rng), &public_params.vanilla_params)
+                PoRCompound::<Tree>::groth_params(Some(rng), &public_params.vanilla_params)
                     .expect("failed to generate groth params");
 
             let proof = PoRCompound::prove(
@@ -655,28 +637,35 @@ mod tests {
 
     #[test]
     fn test_private_por_input_circuit_with_bls12_381_pedersen_binary() {
-        test_private_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U2>(8_246);
+        test_private_por_input_circuit_with_bls12_381::<TestTree<PedersenHasher, typenum::U2>>(
+            8_246,
+        );
     }
 
     #[test]
     fn test_private_por_input_circuit_with_bls12_381_poseidon_binary() {
-        test_private_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U2>(1_904);
+        test_private_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U2>>(
+            1_904,
+        );
     }
 
     #[test]
     fn test_private_por_input_circuit_with_bls12_381_pedersen_quad() {
-        test_private_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U4>(12_410);
+        test_private_por_input_circuit_with_bls12_381::<TestTree<PedersenHasher, typenum::U4>>(
+            12_410,
+        );
     }
 
     #[test]
     fn test_private_por_input_circuit_with_bls12_381_poseidon_quad() {
-        test_private_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U4>(1_184);
+        test_private_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U4>>(
+            1_184,
+        );
     }
 
-    fn test_private_por_input_circuit_with_bls12_381<H: Hasher, U>(num_constraints: usize)
-    where
-        U: 'static + PoseidonArity,
-    {
+    fn test_private_por_input_circuit_with_bls12_381<Tree: MerkleTreeTrait>(
+        num_constraints: usize,
+    ) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 64; // good for 2, 4 and 8
@@ -688,8 +677,9 @@ mod tests {
                 .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
                 .collect();
 
-            let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-            let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
+            let graph =
+                BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
+            let tree = graph.merkle_tree::<Tree>(None, data.as_slice()).unwrap();
 
             // -- PoR
 
@@ -702,7 +692,7 @@ mod tests {
                 commitment: None,
             };
 
-            let priv_inputs = por::PrivateInputs::<H, U>::new(
+            let priv_inputs = por::PrivateInputs::<Tree>::new(
                 bytes_into_fr(data_at_node(data.as_slice(), pub_inputs.challenge).unwrap())
                     .unwrap()
                     .into(),
@@ -710,11 +700,11 @@ mod tests {
             );
 
             // create a non circuit proof
-            let proof = por::PoR::<H, U>::prove(&pub_params, &pub_inputs, &priv_inputs)
+            let proof = por::PoR::<Tree>::prove(&pub_params, &pub_inputs, &priv_inputs)
                 .expect("proving failed");
 
             // make sure it verifies
-            let is_valid = por::PoR::<H, U>::verify(&pub_params, &pub_inputs, &proof)
+            let is_valid = por::PoR::<Tree>::verify(&pub_params, &pub_inputs, &proof)
                 .expect("verification failed");
             assert!(is_valid, "failed to verify por proof");
 
@@ -722,13 +712,12 @@ mod tests {
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let por = PoRCircuit::<U, H> {
+            let por = PoRCircuit::<Tree> {
                 value: Root::Val(Some(proof.data.into())),
                 auth_path: proof.proof.as_options(),
                 root: Root::Val(Some(tree.root().into())),
                 private: true,
-                _h: PhantomData,
-                _u: PhantomData,
+                _tree: PhantomData,
             };
 
             por.synthesize(&mut cs).expect("circuit synthesis failed");
@@ -741,8 +730,10 @@ mod tests {
                 "wrong number of constraints"
             );
 
-            let auth_path_bits =
-                challenge_into_auth_path_bits::<U>(pub_inputs.challenge, pub_params.leaves);
+            let auth_path_bits = challenge_into_auth_path_bits::<Tree::Arity>(
+                pub_inputs.challenge,
+                pub_params.leaves,
+            );
             let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
 
             let mut expected_inputs = Vec::new();
