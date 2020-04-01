@@ -4,18 +4,16 @@ use anyhow::ensure;
 use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
 use bellperson::gadgets::{multipack, num};
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
-use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph::graph_height;
 use crate::error::Result;
 use crate::gadgets::constraint;
 use crate::gadgets::insertion::insert;
 use crate::gadgets::variables::Root;
-use crate::hasher::{HashFunction, Hasher, PoseidonArity, PoseidonEngine};
+use crate::hasher::{HashFunction, Hasher, PoseidonArity};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por::PoR;
 use crate::proof::ProofScheme;
@@ -29,28 +27,26 @@ use crate::proof::ProofScheme;
 /// * `auth_path` - The authentication path of the leaf in the tree.
 /// * `root` - The merkle root of the tree.
 ///
-pub struct PoRCircuit<'a, U, E: JubjubEngine + PoseidonEngine<U>, H: Hasher>
+pub struct PoRCircuit<U, H: Hasher>
 where
-    U: 'static + PoseidonArity<E>,
-    typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
+    U: 'static + PoseidonArity<Bls12>,
+    typenum::Add1<U>: generic_array::ArrayLength<Fr>,
 {
-    params: &'a E::Params,
-    value: Root<E>,
+    value: Root<Bls12>,
     #[allow(clippy::type_complexity)]
-    auth_path: Vec<(Vec<Option<E::Fr>>, Option<usize>)>,
-    root: Root<E>,
+    auth_path: Vec<(Vec<Option<Fr>>, Option<usize>)>,
+    root: Root<Bls12>,
     private: bool,
     _h: PhantomData<H>,
     _u: PhantomData<U>,
 }
 
-impl<'a, U, E: JubjubEngine + PoseidonEngine<U>, H: Hasher> CircuitComponent
-    for PoRCircuit<'a, U, E, H>
+impl<U, H: Hasher> CircuitComponent for PoRCircuit<U, H>
 where
-    U: PoseidonArity<E>,
-    typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
+    U: PoseidonArity<Bls12>,
+    typenum::Add1<U>: generic_array::ArrayLength<Fr>,
 {
-    type ComponentPrivateInputs = Option<Root<E>>;
+    type ComponentPrivateInputs = Option<Root<Bls12>>;
 }
 
 pub struct PoRCompound<H: Hasher, U: typenum::Unsigned> {
@@ -84,8 +80,8 @@ pub fn challenge_into_auth_path_bits<U: typenum::Unsigned>(
     bits
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher, U: typenum::Unsigned>
-    CacheableParameters<E, C, P> for PoRCompound<H, U>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata, H: Hasher, U: typenum::Unsigned>
+    CacheableParameters<C, P> for PoRCompound<H, U>
 {
     fn cache_prefix() -> String {
         format!("proof-of-retrievability-{}-{}", H::name(), U::to_usize())
@@ -93,17 +89,15 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher, U: type
 }
 
 // can only implment for Bls12 because por is not generic over the engine.
-impl<'a, H, U> CompoundProof<'a, Bls12, PoR<H, U>, PoRCircuit<'a, U, Bls12, H>>
-    for PoRCompound<H, U>
+impl<'a, H, U> CompoundProof<'a, PoR<H, U>, PoRCircuit<U, H>> for PoRCompound<H, U>
 where
     H: 'a + Hasher,
     U: 'a + PoseidonArity<Bls12>,
-    Bls12: PoseidonEngine<U>,
     typenum::Add1<U>: generic_array::ArrayLength<Fr>,
 {
     fn circuit<'b>(
         public_inputs: &<PoR<H, U> as ProofScheme<'a>>::PublicInputs,
-        _component_private_inputs: <PoRCircuit<'a, U, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
+        _component_private_inputs: <PoRCircuit<U, H> as CircuitComponent>::ComponentPrivateInputs,
         proof: &'b <PoR<H, U> as ProofScheme<'a>>::Proof,
         public_params: &'b <PoR<H, U> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
@@ -118,8 +112,7 @@ where
             "Inputs must be consistent with public params"
         );
 
-        Ok(PoRCircuit::<U, Bls12, H> {
-            params: &*JJ_PARAMS,
+        Ok(PoRCircuit::<U, H> {
             value: Root::Val(Some(proof.data.into())),
             auth_path: proof.proof.as_options(),
             root,
@@ -131,9 +124,8 @@ where
 
     fn blank_circuit(
         public_params: &<PoR<H, U> as ProofScheme<'a>>::PublicParams,
-    ) -> PoRCircuit<'a, U, Bls12, H> {
-        PoRCircuit::<U, Bls12, H> {
-            params: &*JJ_PARAMS,
+    ) -> PoRCircuit<U, H> {
+        PoRCircuit::<U, H> {
             value: Root::Val(None),
             auth_path: vec![
                 (vec![None; U::to_usize() - 1], None);
@@ -169,10 +161,10 @@ where
     }
 }
 
-impl<'a, U, E: JubjubEngine + PoseidonEngine<U>, H: Hasher> Circuit<E> for PoRCircuit<'a, U, E, H>
+impl<'a, U, H: Hasher> Circuit<Bls12> for PoRCircuit<U, H>
 where
-    U: PoseidonArity<E>,
-    typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
+    U: PoseidonArity<Bls12>,
+    typenum::Add1<U>: generic_array::ArrayLength<Fr>,
 {
     /// # Public Inputs
     ///
@@ -185,11 +177,7 @@ where
     /// * value_num - packed version of `value` as bits. (might be more than one Fr)
     ///
     /// Note: All public inputs must be provided as `E::Fr`.
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError>
-    where
-        E: JubjubEngine,
-    {
-        let params = self.params;
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let value = self.value;
         let auth_path = self.auth_path;
         let root = self.root;
@@ -236,11 +224,10 @@ where
                 let inserted = insert(cs, &cur, &index_bits, &path_elements)?;
 
                 // Compute the new subtree value
-                cur = H::Function::hash_multi_leaf_circuit(
+                cur = H::Function::hash_multi_leaf_circuit::<U, _>(
                     cs.namespace(|| "computation of commitment hash"),
                     &inserted,
                     i,
-                    params,
                 )?;
             }
 
@@ -263,26 +250,23 @@ where
     }
 }
 
-impl<'a, U, E: JubjubEngine + PoseidonEngine<U>, H: Hasher> PoRCircuit<'a, U, E, H>
+impl<'a, U, H: Hasher> PoRCircuit<U, H>
 where
-    U: 'static + PoseidonArity<E>,
-    typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
+    U: 'static + PoseidonArity<Bls12>,
+    typenum::Add1<U>: generic_array::ArrayLength<Fr>,
 {
     #[allow(clippy::type_complexity)]
     pub fn synthesize<CS>(
         mut cs: CS,
-        params: &E::Params,
-        value: Root<E>,
-        auth_path: Vec<(Vec<Option<E::Fr>>, Option<usize>)>,
-        root: Root<E>,
+        value: Root<Bls12>,
+        auth_path: Vec<(Vec<Option<Fr>>, Option<usize>)>,
+        root: Root<Bls12>,
         private: bool,
     ) -> Result<(), SynthesisError>
     where
-        E: JubjubEngine,
-        CS: ConstraintSystem<E>,
+        CS: ConstraintSystem<Bls12>,
     {
-        let por = PoRCircuit::<U, E, H> {
-            params,
+        let por = PoRCircuit::<U, H> {
             value,
             auth_path,
             root,
@@ -311,7 +295,7 @@ mod tests {
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{
-        Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher,
+        Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonEngine, PoseidonHasher, Sha256Hasher,
     };
     use crate::por;
     use crate::proof::ProofScheme;
@@ -324,7 +308,7 @@ mod tests {
         let leaves = 64; // good for 2, 4 and 8
 
         let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
         let graph = BucketGraph::<PedersenHasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
@@ -346,7 +330,7 @@ mod tests {
             PoRCompound::<PedersenHasher, typenum::U2>::setup(&setup_params).expect("setup failed");
 
         let private_inputs = por::PrivateInputs::<PedersenHasher, typenum::U2>::new(
-            bytes_into_fr::<Bls12>(data_at_node(data.as_slice(), public_inputs.challenge).unwrap())
+            bytes_into_fr(data_at_node(data.as_slice(), public_inputs.challenge).unwrap())
                 .expect("failed to create Fr from node data")
                 .into(),
             &tree,
@@ -467,7 +451,7 @@ mod tests {
             // -- Basic Setup
 
             let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+                .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
                 .collect();
 
             let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
@@ -504,8 +488,7 @@ mod tests {
             // -- Circuit
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
-            let por = PoRCircuit::<U, Bls12, H> {
-                params: &JJ_PARAMS,
+            let por = PoRCircuit::<U, H> {
                 value: Root::Val(Some(proof.data.into())),
                 auth_path: proof.proof.as_options(),
                 root: Root::Val(Some(pub_inputs.commitment.unwrap().into())),
@@ -585,7 +568,7 @@ mod tests {
         let leaves = 64; // good for 2, 4 and 8
 
         let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
         let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
@@ -607,11 +590,9 @@ mod tests {
             let public_params = PoRCompound::<H, U>::setup(&setup_params).expect("setup failed");
 
             let private_inputs = por::PrivateInputs::<H, U>::new(
-                bytes_into_fr::<Bls12>(
-                    data_at_node(data.as_slice(), public_inputs.challenge).unwrap(),
-                )
-                .expect("failed to create Fr from node data")
-                .into(),
+                bytes_into_fr(data_at_node(data.as_slice(), public_inputs.challenge).unwrap())
+                    .expect("failed to create Fr from node data")
+                    .into(),
                 &tree,
             );
 
@@ -714,7 +695,7 @@ mod tests {
             // -- Basic Setup
 
             let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+                .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
                 .collect();
 
             let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
@@ -732,11 +713,9 @@ mod tests {
             };
 
             let priv_inputs = por::PrivateInputs::<H, U>::new(
-                bytes_into_fr::<Bls12>(
-                    data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
-                )
-                .unwrap()
-                .into(),
+                bytes_into_fr(data_at_node(data.as_slice(), pub_inputs.challenge).unwrap())
+                    .unwrap()
+                    .into(),
                 &tree,
             );
 
@@ -753,8 +732,7 @@ mod tests {
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let por = PoRCircuit::<U, Bls12, H> {
-                params: &JJ_PARAMS,
+            let por = PoRCircuit::<U, H> {
                 value: Root::Val(Some(proof.data.into())),
                 auth_path: proof.proof.as_options(),
                 root: Root::Val(Some(tree.root().into())),
