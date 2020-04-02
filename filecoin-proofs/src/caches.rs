@@ -109,9 +109,8 @@ pub fn get_post_params(post_config: &PoStConfig) -> Result<Arc<Bls12GrothParams>
 
             let parameters_generator = || {
                 <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
-                    Bls12,
                     ElectionPoSt<DefaultTreeHasher>,
-                    ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
+                    ElectionPoStCircuit<DefaultTreeHasher>,
                 >>::groth_params::<rand::rngs::OsRng>(None, &post_public_params)
                 .map_err(Into::into)
             };
@@ -129,9 +128,8 @@ pub fn get_post_params(post_config: &PoStConfig) -> Result<Arc<Bls12GrothParams>
 
             let parameters_generator = || {
                 <fallback::FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                    Bls12,
                     fallback::FallbackPoSt<DefaultTreeHasher>,
-                    fallback::FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+                    fallback::FallbackPoStCircuit<DefaultTreeHasher>,
                 >>::groth_params::<rand::rngs::OsRng>(None, &post_public_params)
                 .map_err(Into::into)
             };
@@ -149,9 +147,8 @@ pub fn get_post_params(post_config: &PoStConfig) -> Result<Arc<Bls12GrothParams>
 
             let parameters_generator = || {
                 <fallback::FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                    Bls12,
                     fallback::FallbackPoSt<DefaultTreeHasher>,
-                    fallback::FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+                    fallback::FallbackPoStCircuit<DefaultTreeHasher>,
                 >>::groth_params::<rand::rngs::OsRng>(None, &post_public_params)
                 .map_err(Into::into)
             };
@@ -197,9 +194,8 @@ pub fn get_post_verifying_key(post_config: &PoStConfig) -> Result<Arc<Bls12Verif
 
             let vk_generator = || {
                 <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
-                    Bls12,
                     ElectionPoSt<DefaultTreeHasher>,
-                    ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
+                    ElectionPoStCircuit<DefaultTreeHasher>,
                 >>::verifying_key::<rand::rngs::OsRng>(None, &post_public_params)
                 .map_err(Into::into)
             };
@@ -217,9 +213,8 @@ pub fn get_post_verifying_key(post_config: &PoStConfig) -> Result<Arc<Bls12Verif
 
             let vk_generator = || {
                 <fallback::FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                    Bls12,
                     fallback::FallbackPoSt<DefaultTreeHasher>,
-                    fallback::FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+                    fallback::FallbackPoStCircuit<DefaultTreeHasher>,
                 >>::verifying_key::<rand::rngs::OsRng>(None, &post_public_params)
                 .map_err(Into::into)
             };
@@ -237,9 +232,8 @@ pub fn get_post_verifying_key(post_config: &PoStConfig) -> Result<Arc<Bls12Verif
 
             let vk_generator = || {
                 <fallback::FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                    Bls12,
                     fallback::FallbackPoSt<DefaultTreeHasher>,
-                    fallback::FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+                    fallback::FallbackPoStCircuit<DefaultTreeHasher>,
                 >>::verifying_key::<rand::rngs::OsRng>(None, &post_public_params)
                 .map_err(Into::into)
             };

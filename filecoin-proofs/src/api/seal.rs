@@ -14,7 +14,7 @@ use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::Graph;
 use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::measurements::{measure_op, Operation::CommD};
-use storage_proofs::merkle::{create_merkle_tree, BinaryMerkleTree};
+use storage_proofs::merkle::{create_merkle_tree, BinaryMerkleTree, BinaryTree, MerkleTreeTrait};
 use storage_proofs::multi_proof::MultiProof;
 use storage_proofs::porep::stacked::{
     self, generate_replica_id, ChallengeRequirements, StackedCompound, StackedDrg, Tau,
@@ -128,7 +128,7 @@ where
             CacheKey::CommDTree.to_string(),
             StoreConfig::default_cached_above_base_layer(tree_leafs, BINARY_ARITY),
         );
-        let data_tree = create_merkle_tree::<DefaultPieceHasher, typenum::U2>(
+        let data_tree = create_merkle_tree::<BinaryTree<DefaultPieceHasher>>(
             Some(config.clone()),
             tree_leafs,
             &data,
@@ -231,8 +231,8 @@ where
 
         let store: DiskStore<<DefaultPieceHasher as Hasher>::Domain> =
             DiskStore::new_from_disk(tree_size, BINARY_ARITY, &config)?;
-        BinaryMerkleTree::from_data_store(store, tree_leafs)
-    }?;
+        BinaryTree::from_merkle(BinaryMerkleTree::from_data_store(store, tree_leafs)?)
+    };
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(
