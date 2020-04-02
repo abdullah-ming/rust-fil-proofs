@@ -259,25 +259,25 @@ impl<'a, H: Hasher> From<&'a Proof<H>> for Proof<H> {
 }
 
 #[derive(Default)]
-pub struct DrgPoRep<'a, Tree, G>
+pub struct DrgPoRep<'a, H, G>
 where
-    Tree: 'a + MerkleTreeTrait,
-    G: 'a + Graph<Tree::Hasher>,
+    H: 'a + Hasher,
+    G: 'a + Graph<H>,
 {
-    _h: PhantomData<&'a Tree>,
+    _h: PhantomData<&'a H>,
     _g: PhantomData<G>,
 }
 
-impl<'a, Tree, G> ProofScheme<'a> for DrgPoRep<'a, Tree, G>
+impl<'a, H, G> ProofScheme<'a> for DrgPoRep<'a, H, G>
 where
-    Tree: 'a + MerkleTreeTrait,
-    G: 'a + Graph<Tree::Hasher> + ParameterSetMetadata,
+    H: 'a + Hasher,
+    G: 'a + Graph<H> + ParameterSetMetadata,
 {
-    type PublicParams = PublicParams<Tree::Hasher, G>;
+    type PublicParams = PublicParams<H, G>;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs<<Tree::Hasher as Hasher>::Domain>;
-    type PrivateInputs = PrivateInputs<'a, Tree::Hasher>;
-    type Proof = Proof<Tree::Hasher>;
+    type PublicInputs = PublicInputs<<H as Hasher>::Domain>;
+    type PrivateInputs = PrivateInputs<'a, H>;
+    type Proof = Proof<H>;
     type Requirements = NoRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
@@ -306,7 +306,7 @@ where
 
         let mut replica_nodes = Vec::with_capacity(len);
         let mut replica_parents = Vec::with_capacity(len);
-        let mut data_nodes: Vec<DataProof<Tree::Hasher, typenum::U2>> = Vec::with_capacity(len);
+        let mut data_nodes: Vec<DataProof<H, typenum::U2>> = Vec::with_capacity(len);
 
         for i in 0..len {
             let challenge = pub_inputs.challenges[i] % pub_params.graph.size();
@@ -363,7 +363,7 @@ where
                 //     challenge,
                 // )?;
 
-                let extracted = decode_domain_block::<Tree::Hasher>(
+                let extracted = decode_domain_block::<H>(
                     &pub_inputs.replica_id.context("missing replica_id")?,
                     tree_r,
                     challenge,
@@ -469,23 +469,23 @@ where
     }
 }
 
-impl<'a, Tree, G> PoRep<'a, Tree, G> for DrgPoRep<'a, Tree, G>
+impl<'a, H, G> PoRep<'a, H, H> for DrgPoRep<'a, H, G>
 where
-    Tree: 'a + MerkleTreeTrait,
-    G::Key: AsRef<<Tree::Hasher as Hasher>::Domain>,
-    G: 'a + Graph<Tree::Hasher> + ParameterSetMetadata + Sync + Send + Hasher,
+    H: 'a + Hasher,
+    G::Key: AsRef<<H as Hasher>::Domain>,
+    G: 'a + Graph<H> + ParameterSetMetadata + Sync + Send,
 {
-    type Tau = Tau<<Tree::Hasher as Hasher>::Domain>;
-    type ProverAux = ProverAux<Tree::Hasher>;
+    type Tau = Tau<<H as Hasher>::Domain>;
+    type ProverAux = ProverAux<H>;
 
     fn replicate(
         pp: &Self::PublicParams,
-        replica_id: &<Tree::Hasher as Hasher>::Domain,
+        replica_id: &<H as Hasher>::Domain,
         mut data: Data<'a>,
-        data_tree: Option<BinaryMerkleTree<G>>,
+        data_tree: Option<BinaryMerkleTree<H>>,
         config: StoreConfig,
         replica_path: PathBuf,
-    ) -> Result<(Tau<<Tree::Hasher as Hasher>::Domain>, ProverAux<Tree::Hasher>)> {
+    ) -> Result<(Self::Tau, Self::ProverAux)> {
         use crate::cache_key::CacheKey;
 
         use std::io::prelude::*;
@@ -494,7 +494,7 @@ where
             Some(tree) => tree,
             None => pp
                 .graph
-                .merkle_tree::<Tree>(Some(config.clone()), data.as_ref())?,
+                .merkle_tree::<BinaryMerkleTree<H>>(Some(config.clone()), data.as_ref())?,
         };
 
         let graph = &pp.graph;
@@ -512,8 +512,8 @@ where
             let start = data_at_node_offset(node);
             let end = start + NODE_SIZE;
 
-            let node_data = <Tree::Hasher as Hasher>::Domain::try_from_bytes(&data.as_ref()[start..end])?;
-            let encoded = Tree::Hasher::sloth_encode(key.as_ref(), &node_data)?;
+            let node_data = <H as Hasher>::Domain::try_from_bytes(&data.as_ref()[start..end])?;
+            let encoded = H::sloth_encode(key.as_ref(), &node_data)?;
 
             encoded.write_bytes(&mut data.as_mut()[start..end])?;
         }
@@ -539,7 +539,7 @@ where
 
     fn extract_all<'b>(
         pp: &'b Self::PublicParams,
-        replica_id: &'b <Tree::Hasher as Hasher>::Domain,
+        replica_id: &'b <H as Hasher>::Domain,
         data: &'b [u8],
         _config: Option<StoreConfig>,
     ) -> Result<Vec<u8>> {
@@ -548,7 +548,7 @@ where
 
     fn extract(
         pp: &Self::PublicParams,
-        replica_id: &<Tree::Hasher as Hasher>::Domain,
+        replica_id: &<H as Hasher>::Domain,
         data: &[u8],
         node: usize,
         _config: Option<StoreConfig>,
@@ -572,7 +572,7 @@ where
     let result = (0..graph.size())
         .into_par_iter()
         .flat_map(|i| {
-            decode_block(graph, replica_id, data, exp_parents_data, i)
+            decode_block::<H, G>(graph, replica_id, data, exp_parents_data, i)
                 .unwrap()
                 .into_bytes()
         })
@@ -687,7 +687,8 @@ mod tests {
     fn test_extract_all<Tree: MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let replica_id: <Tree::Hasher as Hasher>::Domain = <Tree::Hasher as Hasher>::Domain::random(rng);
+        let replica_id: <Tree::Hasher as Hasher>::Domain =
+            <Tree::Hasher as Hasher>::Domain::random(rng);
         let data = vec![2u8; 32 * 4];
 
         // create a copy, so we can compare roundtrips
@@ -704,7 +705,8 @@ mod tests {
             challenges_count: 1,
         };
 
-        let pp = DrgPoRep::<Tree::Hasher, BucketGraph<Tree::Hasher>>::setup(&sp).expect("setup failed");
+        let pp: PublicParams<Tree::Hasher, BucketGraph<Tree::Hasher>> =
+            DrgPoRep::setup(&sp).expect("setup failed");
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
@@ -734,7 +736,7 @@ mod tests {
         copied.copy_from_slice(&mmapped_data_copy);
         assert_ne!(data, copied, "replication did not change data");
 
-        let decoded_data = DrgPoRep::extract_all(
+        let decoded_data = DrgPoRep::<Tree::Hasher, _>::extract_all(
             &pp,
             &replica_id,
             &mut mmapped_data_copy,
@@ -765,7 +767,8 @@ mod tests {
     fn test_extract<Tree: MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let replica_id: <Tree::Hasher as Hasher>::Domain = <Tree::Hasher as Hasher>::Domain::random(rng);
+        let replica_id: <Tree::Hasher as Hasher>::Domain =
+            <Tree::Hasher as Hasher>::Domain::random(rng);
         let nodes = 4;
         let data = vec![2u8; 32 * nodes];
 
@@ -783,7 +786,8 @@ mod tests {
             challenges_count: 1,
         };
 
-        let pp = DrgPoRep::<Tree, BucketGraph<Tree::Hasher>>::setup(&sp).expect("setup failed");
+        let pp =
+            DrgPoRep::<Tree::Hasher, BucketGraph<Tree::Hasher>>::setup(&sp).expect("setup failed");
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
@@ -863,7 +867,8 @@ mod tests {
             let expansion_degree = 0;
             let seed = new_seed();
 
-            let replica_id: <Tree::Hasher as Hasher>::Domain = <Tree::Hasher as Hasher>::Domain::random(rng);
+            let replica_id: <Tree::Hasher as Hasher>::Domain =
+                <Tree::Hasher as Hasher>::Domain::random(rng);
             let data: Vec<u8> = (0..nodes)
                 .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
                 .collect();
@@ -900,7 +905,7 @@ mod tests {
             let temp_path = temp_dir.path();
             let replica_path = temp_path.join("replica-path");
 
-            let (tau, aux) = DrgPoRep::<Tree, _>::replicate(
+            let (tau, aux) = DrgPoRep::<Tree::Hasher, _>::replicate(
                 &pp,
                 &replica_id,
                 (mmapped_data_copy.as_mut()).into(),
@@ -930,8 +935,8 @@ mod tests {
                 ),
             };
 
-            let real_proof =
-                DrgPoRep::<Tree::Hasher, _>::prove(&pp, &pub_inputs, &priv_inputs).expect("proving failed");
+            let real_proof = DrgPoRep::<Tree::Hasher, _>::prove(&pp, &pub_inputs, &priv_inputs)
+                .expect("proving failed");
 
             if use_wrong_parents {
                 // Only one 'wrong' option will be tested at a time.
@@ -992,9 +997,11 @@ mod tests {
                 );
 
                 assert!(
-                    !DrgPoRep::<Tree, _>::verify(&pp, &pub_inputs, &proof2).unwrap_or_else(|e| {
-                        panic!("Verification failed: {}", e);
-                    }),
+                    !DrgPoRep::<Tree::Hasher, _>::verify(&pp, &pub_inputs, &proof2).unwrap_or_else(
+                        |e| {
+                            panic!("Verification failed: {}", e);
+                        }
+                    ),
                     "verified in error -- with wrong parent proofs"
                 );
 
@@ -1004,12 +1011,13 @@ mod tests {
             let proof = real_proof;
 
             if use_wrong_challenge {
-                let pub_inputs_with_wrong_challenge_for_proof = PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
-                    replica_id: Some(replica_id),
-                    challenges: vec![if challenge == 1 { 2 } else { 1 }],
-                    tau: Some(tau.into()),
-                };
-                let verified = DrgPoRep::<Tree, _>::verify(
+                let pub_inputs_with_wrong_challenge_for_proof =
+                    PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
+                        replica_id: Some(replica_id),
+                        challenges: vec![if challenge == 1 { 2 } else { 1 }],
+                        tau: Some(tau.into()),
+                    };
+                let verified = DrgPoRep::<Tree::Hasher, _>::verify(
                     &pp,
                     &pub_inputs_with_wrong_challenge_for_proof,
                     &proof,
@@ -1021,7 +1029,7 @@ mod tests {
                 );
             } else {
                 assert!(
-                    DrgPoRep::<Tree, _>::verify(&pp, &pub_inputs, &proof)
+                    DrgPoRep::<Tree::Hasher, _>::verify(&pp, &pub_inputs, &proof)
                         .expect("verification failed"),
                     "failed to verify"
                 );
@@ -1033,21 +1041,21 @@ mod tests {
     }
 
     fn prove_verify(n: usize, i: usize) {
-        prove_verify_aux::<PedersenHasher>(n, i, false, false);
-        prove_verify_aux::<Sha256Hasher>(n, i, false, false);
-        prove_verify_aux::<Blake2sHasher>(n, i, false, false);
+        prove_verify_aux::<BinaryMerkleTree<PedersenHasher>>(n, i, false, false);
+        prove_verify_aux::<BinaryMerkleTree<Sha256Hasher>>(n, i, false, false);
+        prove_verify_aux::<BinaryMerkleTree<Blake2sHasher>>(n, i, false, false);
     }
 
     fn prove_verify_wrong_challenge(n: usize, i: usize) {
-        prove_verify_aux::<PedersenHasher>(n, i, true, false);
-        prove_verify_aux::<Sha256Hasher>(n, i, true, false);
-        prove_verify_aux::<Blake2sHasher>(n, i, true, false);
+        prove_verify_aux::<BinaryMerkleTree<PedersenHasher>>(n, i, true, false);
+        prove_verify_aux::<BinaryMerkleTree<Sha256Hasher>>(n, i, true, false);
+        prove_verify_aux::<BinaryMerkleTree<Blake2sHasher>>(n, i, true, false);
     }
 
     fn prove_verify_wrong_parents(n: usize, i: usize) {
-        prove_verify_aux::<PedersenHasher>(n, i, false, true);
-        prove_verify_aux::<Sha256Hasher>(n, i, false, true);
-        prove_verify_aux::<Blake2sHasher>(n, i, false, true);
+        prove_verify_aux::<BinaryMerkleTree<PedersenHasher>>(n, i, false, true);
+        prove_verify_aux::<BinaryMerkleTree<Sha256Hasher>>(n, i, false, true);
+        prove_verify_aux::<BinaryMerkleTree<Blake2sHasher>>(n, i, false, true);
     }
 
     table_tests! {

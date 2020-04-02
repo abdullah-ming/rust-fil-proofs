@@ -495,11 +495,12 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
                     get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY)
                 );
 
-                let tree_r_last: OctLCMerkleTree<Tree::Hasher> = open_lcmerkle_tree::<Tree::Hasher, typenum::U8>(
-                    t_aux.tree_r_last_config.clone(),
-                    get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY),
-                    &replica_path,
-                )?;
+                let tree_r_last: OctLCMerkleTree<Tree::Hasher> =
+                    open_lcmerkle_tree::<Tree::Hasher, typenum::U8>(
+                        t_aux.tree_r_last_config.clone(),
+                        get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY),
+                        &replica_path,
+                    )?;
                 let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;
 
                 Ok(TemporaryAuxCache {
@@ -533,7 +534,8 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
 
                 let tree_c_size = t_aux.tree_c_config.size.unwrap();
                 let tree_c_leafs = get_merkle_tree_leafs(tree_c_size, OCT_ARITY);
-                let tree_c = OctSubMerkleTree::<Tree::Hasher>::from_store_configs(tree_c_leafs, &configs)?;
+                let tree_c =
+                    OctSubMerkleTree::<Tree::Hasher>::from_store_configs(tree_c_leafs, &configs)?;
 
                 let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;
                 let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
@@ -561,11 +563,12 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
                     (configs, replica_paths)
                 };
 
-                let tree_r_last = OctLCSubMerkleTree::<Tree::Hasher>::from_store_configs_and_replicas(
-                    tree_r_last_leafs,
-                    &configs,
-                    &replica_paths,
-                )?;
+                let tree_r_last =
+                    OctLCSubMerkleTree::<Tree::Hasher>::from_store_configs_and_replicas(
+                        tree_r_last_leafs,
+                        &configs,
+                        &replica_paths,
+                    )?;
 
                 Ok(TemporaryAuxCache {
                     labels: LabelsCache::new(&t_aux.labels).context("labels_cache")?,
@@ -597,8 +600,10 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
 
                 let tree_c_size = t_aux.tree_c_config.size.unwrap();
                 let tree_c_leafs = get_merkle_tree_leafs(tree_c_size, OCT_ARITY);
-                let tree_c =
-                    OctTopMerkleTree::<Tree::Hasher>::from_sub_tree_store_configs(tree_c_leafs, &configs)?;
+                let tree_c = OctTopMerkleTree::<Tree::Hasher>::from_sub_tree_store_configs(
+                    tree_c_leafs,
+                    &configs,
+                )?;
 
                 let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;
                 let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
@@ -651,7 +656,11 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
         self.labels.labels_for_layer(layer)
     }
 
-    pub fn domain_node_at_layer(&self, layer: usize, node_index: u32) -> Result<<Tree::Hasher as Hasher>::Domain> {
+    pub fn domain_node_at_layer(
+        &self,
+        layer: usize,
+        node_index: u32,
+    ) -> Result<<Tree::Hasher as Hasher>::Domain> {
         Ok(self.labels_for_layer(layer).read_at(node_index as usize)?)
     }
 
@@ -750,7 +759,8 @@ pub struct LabelsCache<Tree: MerkleTreeTrait> {
 
 impl<Tree: MerkleTreeTrait> LabelsCache<Tree> {
     pub fn new(labels: &Labels<Tree::Hasher>) -> Result<Self> {
-        let mut disk_store_labels: Vec<DiskStore<<Tree::Hasher>::Domain>> = Vec::with_capacity(labels.len());
+        let mut disk_store_labels: Vec<DiskStore<<Tree::Hasher as Hasher>::Domain>> =
+            Vec::with_capacity(labels.len());
         for i in 0..labels.len() {
             disk_store_labels.push(labels.labels_for_layer(i + 1)?);
         }
