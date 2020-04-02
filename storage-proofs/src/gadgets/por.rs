@@ -310,19 +310,19 @@ mod tests {
         MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>, A, typenum::U0, typenum::U0>;
 
     #[allow(clippy::type_complexity)]
-    fn generate_tree<
-        R: Rng,
-        H: Hasher,
-        BaseTreeArity: 'static + PoseidonArity,
-        S: Store<H::Domain>,
-    >(
+    fn generate_tree<R: Rng, Tree: MerkleTreeTrait>(
         rng: &mut R,
         size: usize,
     ) -> (
         Vec<u8>,
-        MerkleTree<H::Domain, H::Function, S, BaseTreeArity>,
+        MerkleTree<
+            <Tree::Hasher as Hasher>::Domain,
+            <Tree::Hasher as Hasher>::Function,
+            Tree::Store,
+            Tree::Arity,
+        >,
     ) {
-        let el = H::Domain::random(rng);
+        let el = <Tree::Hasher as Hasher>::Domain::random(rng);
         let elements = (0..size).map(|_| el).collect::<Vec<_>>();
         let mut data = Vec::new();
         elements
@@ -349,10 +349,7 @@ mod tests {
         let mut trees = Vec::with_capacity(base_tree_count);
         let mut data = Vec::new();
         for _ in 0..base_tree_count {
-            let (inner_data, tree) = generate_tree::<R, Tree::Hasher, Tree::Arity, Tree::Store>(
-                rng,
-                size / base_tree_count,
-            );
+            let (inner_data, tree) = generate_tree::<R, Tree>(rng, size / base_tree_count);
             trees.push(tree);
             data.extend(inner_data);
         }
@@ -377,29 +374,43 @@ mod tests {
         let sub_tree_count = Tree::SubTreeArity::to_usize();
         let top_tree_count = Tree::TopTreeArity::to_usize();
 
-        let mut sub_trees = Vec::with_capacity(sub_tree_count);
-        let mut data = Vec::new();
-        for i in 0..top_tree_count {
-            let (inner_data, tree) = generate_sub_tree::<R, Tree>(rng, nodes / top_tree_count);
-            sub_trees.push(tree);
-            data.extend(inner_data);
+        dbg!(
+            Tree::Arity::to_usize(),
+            Tree::SubTreeArity::to_usize(),
+            Tree::TopTreeArity::to_usize(),
+        );
+
+        if (top_tree_count > 0) && (sub_tree_count > 0) {
+            let mut sub_trees = Vec::with_capacity(sub_tree_count);
+            let mut data = Vec::new();
+            for i in 0..top_tree_count {
+                let (inner_data, tree) = generate_sub_tree::<R, Tree>(rng, nodes / top_tree_count);
+                sub_trees.push(tree);
+                data.extend(inner_data);
+            }
+            (
+                data,
+                Tree::from_merkle(
+                    MerkleTree::<
+                        <Tree::Hasher as Hasher>::Domain,
+                        <Tree::Hasher as Hasher>::Function,
+                        Tree::Store,
+                        Tree::Arity,
+                        Tree::SubTreeArity,
+                        Tree::TopTreeArity,
+                    >::from_sub_trees(sub_trees)
+                    .unwrap(),
+                ),
+            )
+        } else {
+            if sub_tree_count > 0 {
+                unimplemented!()
+            } else {
+                let (data, tree) = generate_tree::<R, Tree>(rng, nodes);
+                (data, Tree::from_merkle(tree))
+            }
         }
-
-        let tree = MerkleTree::<
-            <Tree::Hasher as Hasher>::Domain,
-            <Tree::Hasher as Hasher>::Function,
-            Tree::Store,
-            Tree::Arity,
-            Tree::SubTreeArity,
-            Tree::TopTreeArity,
-        >::from_sub_trees(sub_trees)
-        .unwrap();
-
-        (data, Tree::from_merkle(tree))
     }
-
-    #[test]
-    fn por_test_shapes() {}
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
