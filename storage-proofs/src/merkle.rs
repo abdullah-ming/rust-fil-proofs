@@ -68,7 +68,7 @@ pub type OctLCMerkleTree<H> = LCTree<H, U8, U0, U0>;
 pub type OctLCSubMerkleTree<H> = LCTree<H, U8, U2, U0>;
 pub type OctLCTopMerkleTree<H> = LCTree<H, U8, U8, U2>;
 
-pub trait MerkleTreeTrait: Send + Sync {
+pub trait MerkleTreeTrait: Send + Sync + std::fmt::Debug {
     type Arity: 'static + PoseidonArity;
     type SubTreeArity: 'static + PoseidonArity;
     type TopTreeArity: 'static + PoseidonArity;
@@ -264,6 +264,7 @@ impl<
     }
 
     fn validate_data(&self, data: H::Domain) -> bool {
+        dbg!("xxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
         forward_method!(self.data, validate_data, data)
     }
 
@@ -879,6 +880,7 @@ fn proof_to_single<H: Hasher, Arity: Unsigned, TargetArity: Unsigned>(
 ) -> SingleProof<H, TargetArity> {
     let root = proof.root();
     let leaf = proof.item();
+    dbg!("making single proof", &proof.item(), proof.path());
     let path = extract_path::<H, TargetArity>(proof.lemma(), proof.path(), lemma_start_index);
 
     SingleProof::new(root, leaf, path)
@@ -938,6 +940,8 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> MerkleProofTrait for SingleProof
     }
 
     fn validate_data(&self, data: H::Domain) -> bool {
+        dbg!(&self.leaf(), &data, &self.verify());
+
         if !self.verify() {
             return false;
         }
@@ -1031,6 +1035,8 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
         if !self.verify() {
             return false;
         }
+
+        dbg!(&self.leaf(), &data);
 
         self.leaf() == data
     }
@@ -1139,7 +1145,7 @@ impl<
         if !self.verify() {
             return false;
         }
-
+        dbg!(&self.leaf(), &data);
         self.leaf() == data
     }
 
