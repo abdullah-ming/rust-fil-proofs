@@ -39,23 +39,23 @@ use crate::util::NODE_SIZE;
 pub const TOTAL_PARENTS: usize = 37;
 
 #[derive(Debug)]
-pub struct StackedDrg<'a, H: 'a + Hasher, G: 'a + Hasher> {
-    _a: PhantomData<&'a H>,
+pub struct StackedDrg<'a, Tree: 'a + MerkleTreeTrait, G: 'a + Hasher> {
+    _a: PhantomData<&'a Tree>,
     _b: PhantomData<&'a G>,
 }
 
-impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
+impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tree, G> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn prove_layers(
-        graph: &StackedBucketGraph<H>,
-        pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
-        p_aux: &PersistentAux<H::Domain>,
-        t_aux: &TemporaryAuxCache<H, G>,
+        graph: &StackedBucketGraph<Tree::Hasher>,
+        pub_inputs: &PublicInputs<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>,
+        p_aux: &PersistentAux<<Tree::Hasher as Hasher>::Domain>,
+        t_aux: &TemporaryAuxCache<Tree, G>,
         layer_challenges: &LayerChallenges,
         layers: usize,
         _total_layers: usize,
         partition_count: usize,
-    ) -> Result<Vec<Vec<Proof<H, G>>>> {
+    ) -> Result<Vec<Vec<Proof<Tree::Hasher, G>>>> {
         assert!(layers > 0);
         assert_eq!(t_aux.labels.len(), layers);
 
@@ -65,9 +65,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         assert!(pub_inputs.tau.is_some());
         assert_eq!(pub_inputs.tau.as_ref().unwrap().comm_d, t_aux.tree_d.root());
 
-        let sector_size = (graph.size() * std::mem::size_of::<H::Domain>()) as u64;
+        let sector_size = (graph.size() * std::mem::size_of::<<Tree::Hasher as Hasher>::Domain>()) as u64;
 
-        let get_drg_parents_columns = |x: usize| -> Result<Vec<Column<H>>> {
+        let get_drg_parents_columns = |x: usize| -> Result<Vec<Column<Tree::Hasher>>> {
             let base_degree = graph.base_graph().degree();
 
             let mut columns = Vec::with_capacity(base_degree);
@@ -84,7 +84,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             Ok(columns)
         };
 
-        let get_exp_parents_columns = |x: usize| -> Result<Vec<Column<H>>> {
+        let get_exp_parents_columns = |x: usize| -> Result<Vec<Column<Tree::Hasher>>> {
             let mut parents = vec![0; graph.expansion_degree()];
             graph.expanded_parents(x, &mut parents);
 
@@ -97,7 +97,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                 // Derive the set of challenges we are proving over.
                 let challenges = pub_inputs.challenges(layer_challenges, graph_size, Some(k));
-                let base_tree_leafs = sector_size as usize / std::mem::size_of::<H::Domain>();
+                let base_tree_leafs = sector_size as usize / std::mem::size_of::<<Tree::Hasher as Hasher>::Domain>();
 
                 // Stacked commitment specifics
                 challenges
@@ -230,7 +230,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                         for layer in 1..=layers {
                             trace!("  encoding proof layer {}", layer,);
-                            let parents_data: Vec<H::Domain> = if layer == 1 {
+                            let parents_data: Vec<<Tree::Hasher as Hasher>::Domain> = if layer == 1 {
                                 let mut parents = vec![0; graph.base_graph().degree()];
                                 graph.base_parents(challenge, &mut parents)?;
 
@@ -264,7 +264,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                 chunk.copy_from_slice(&parents_data[..chunk.len()]);
                             }
 
-                            let proof = LabelingProof::<H>::new(
+                            let proof = LabelingProof::<Tree::Hasher>::new(
                                 challenge as u64,
                                 parents_data_full.clone(),
                             );
@@ -300,9 +300,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 
     pub(crate) fn extract_and_invert_transform_layers(
-        graph: &StackedBucketGraph<H>,
+        graph: &StackedBucketGraph<Tree::Hasher>,
         layer_challenges: &LayerChallenges,
-        replica_id: &<H as Hasher>::Domain,
+        replica_id: &<Tree::Hasher as Hasher>::Domain,
         data: &mut [u8],
         config: StoreConfig,
     ) -> Result<()> {
@@ -322,8 +322,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             .into_iter()
             .zip(data.chunks_mut(NODE_SIZE))
         {
-            let encoded_node = H::Domain::try_from_bytes(encoded_node_bytes)?;
-            let data_node = decode::<H::Domain>(key, encoded_node);
+            let encoded_node = <Tree::Hasher as Hasher>::Domain::try_from_bytes(encoded_node_bytes)?;
+            let data_node = decode::<<Tree::Hasher as Hasher>::Domain>(key, encoded_node);
 
             // store result in the data
             encoded_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&data_node));
@@ -334,16 +334,16 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
     #[allow(clippy::type_complexity)]
     fn generate_labels(
-        graph: &StackedBucketGraph<H>,
+        graph: &StackedBucketGraph<Tree::Hasher>,
         layer_challenges: &LayerChallenges,
-        replica_id: &<H as Hasher>::Domain,
+        replica_id: &<Tree::Hasher as Hasher>::Domain,
         config: StoreConfig,
-    ) -> Result<(LabelsCache<H>, Labels<H>)> {
+    ) -> Result<(LabelsCache<Tree>, Labels<Tree::Hasher>)> {
         info!("generate labels");
 
         let layers = layer_challenges.layers();
         // For now, we require it due to changes in encodings structure.
-        let mut labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);
+        let mut labels: Vec<DiskStore<<Tree::Hasher as Hasher>::Domain>> = Vec::with_capacity(layers);
         let mut label_configs: Vec<StoreConfig> = Vec::with_capacity(layers);
 
         let layer_size = graph.size() * NODE_SIZE;
@@ -374,7 +374,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
             info!("  storing labels on disk");
             // Construct and persist the layer data.
-            let layer_store: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
+            let layer_store: DiskStore<<Tree::Hasher as Hasher>::Domain> = DiskStore::new_from_slice_with_config(
                 graph.size(),
                 OCT_ARITY,
                 &labels_buffer[..layer_size],
@@ -397,11 +397,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         );
 
         Ok((
-            LabelsCache::<H> {
+            LabelsCache::<Tree> {
                 labels,
-                _h: PhantomData,
             },
-            Labels::<H> {
+            Labels::<Tree::Hasher> {
                 labels: label_configs,
                 _h: PhantomData,
             },
@@ -428,14 +427,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 
     pub(crate) fn transform_and_replicate_layers(
-        graph: &StackedBucketGraph<H>,
+        graph: &StackedBucketGraph<Tree::Hasher>,
         layer_challenges: &LayerChallenges,
-        replica_id: &<H as Hasher>::Domain,
+        replica_id: &<Tree::Hasher as Hasher>::Domain,
         data: Data,
         data_tree: Option<BinaryMerkleTree<G>>,
         config: StoreConfig,
         replica_path: PathBuf,
-    ) -> Result<TransformedLayers<H, G>> {
+    ) -> Result<TransformedLayers<Tree::Hasher, G>> {
         // Generate key layers.
         let (_, labels) = measure_op(EncodeWindowTimeAll, || {
             Self::generate_labels(graph, layer_challenges, replica_id, config.clone())
@@ -515,14 +514,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 
     pub(crate) fn transform_and_replicate_layers_inner(
-        graph: &StackedBucketGraph<H>,
+        graph: &StackedBucketGraph<Tree::Hasher>,
         layer_challenges: &LayerChallenges,
         mut data: Data,
         data_tree: Option<BinaryMerkleTree<G>>,
         config: StoreConfig,
         replica_path: PathBuf,
-        label_configs: Labels<H>,
-    ) -> Result<TransformedLayers<H, G>> {
+        label_configs: Labels<Tree::Hasher>,
+    ) -> Result<TransformedLayers<Tree::Hasher, G>> {
         trace!("transform_and_replicate_layers");
         let nodes_count = graph.size();
 
@@ -579,14 +578,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
             // Build the tree for CommC
             // FIXME: Removed "measure_op(GenerateTreeC" closure, as it wasn't building
-            let tree_c_root: Result<H::Domain> = {
+            let tree_c_root: Result<<Tree::Hasher as Hasher>::Domain> = {
                 info!("Building column hashes");
 
                 let configs = split_config(Some(tree_c_config.clone()), tree_count)?;
                 let mut trees = Vec::with_capacity(tree_count);
 
                 for i in 0..tree_count {
-                    let mut hashes: Vec<H::Domain> = vec![H::Domain::default(); nodes_count];
+                    let mut hashes: Vec<<Tree::Hasher as Hasher>::Domain> = vec![<Tree::Hasher as Hasher>::Domain::default(); nodes_count];
 
                     rayon::scope(|s| {
                         // spawn n = num_cpus * 2 threads
@@ -622,7 +621,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                     info!("building tree_c");
                     assert!(configs[i].is_some());
-                    trees.push(OctMerkleTree::<H>::from_par_iter_with_config(
+                    trees.push(OctMerkleTree::<Tree::Hasher>::from_par_iter_with_config(
                         hashes.into_par_iter(),
                         if tree_count == 1 {
                             tree_c_config.clone()
@@ -643,13 +642,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     tree_c_config.size = Some(trees[0].len());
 
                     // Build a top level tree consisting of sub_tree_count (i.e. 2) sub_trees, each of (tree_count / sub_tree_count) base layer trees.
-                    let tree_c = OctTopMerkleTree::<H>::from_sub_trees_as_trees(trees)?;
+                    let tree_c = OctTopMerkleTree::<Tree::Hasher>::from_sub_trees_as_trees(trees)?;
 
                     Ok(tree_c.root())
                 } else {
                     assert!(tree_count == 2 || tree_count == 8 || tree_count == 16);
                     tree_c_config.size = Some(trees[0].len());
-                    let tree_c = OctSubMerkleTree::<H>::from_trees(trees)?;
+                    let tree_c = OctSubMerkleTree::<Tree::Hasher>::from_trees(trees)?;
 
                     Ok(tree_c.root())
                 }
@@ -680,7 +679,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             // Encode original data into the last layer.
             info!("building tree_r_last");
             // FIXME: Removed "measure_op(GenerateTreeRLast" closure, as it wasn't building
-            let tree_r_last_root: Result<H::Domain> = {
+            let tree_r_last_root: Result<<Tree::Hasher as Hasher>::Domain> = {
                 data.ensure_data()?;
 
                 let last_layer_labels = labels.labels_for_last_layer()?;
@@ -700,15 +699,15 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                 .par_chunks_mut(NODE_SIZE),
                         )
                         .map(|(key, data_node_bytes)| {
-                            let data_node = H::Domain::try_from_bytes(data_node_bytes).unwrap();
-                            let encoded_node = encode::<H::Domain>(key, data_node);
+                            let data_node = <Tree::Hasher as Hasher>::Domain::try_from_bytes(data_node_bytes).unwrap();
+                            let encoded_node = encode::<<Tree::Hasher as Hasher>::Domain>(key, data_node);
                             data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
 
                             encoded_node
                         });
 
                     assert!(config.is_some());
-                    trees.push(OctLCMerkleTree::<H>::from_par_iter_with_config(
+                    trees.push(OctLCMerkleTree::<Tree::Hasher>::from_par_iter_with_config(
                         encoded_data,
                         if tree_count == 1 {
                             tree_r_last_config.clone()
@@ -756,7 +755,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         Self::write_replica_data(&data, tree_count, leafs, &replica_path)?;
 
                     let tree_r_last =
-                        OctLCTopMerkleTree::<H>::from_sub_tree_store_configs_and_replicas(
+                        OctLCTopMerkleTree::<Tree::Hasher>::from_sub_tree_store_configs_and_replicas(
                             leafs,
                             &unwrapped_configs,
                             &replica_paths,
@@ -782,7 +781,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     let replica_paths =
                         Self::write_replica_data(&data, tree_count, leafs, &replica_path)?;
 
-                    let tree_r_last = OctLCSubMerkleTree::<H>::from_store_configs_and_replicas(
+                    let tree_r_last = OctLCSubMerkleTree::<Tree::Hasher>::from_store_configs_and_replicas(
                         leafs,
                         &unwrapped_configs,
                         &replica_paths,
@@ -826,7 +825,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         }?;
 
         // comm_r = H(comm_c || comm_r_last)
-        let comm_r: H::Domain = H::Function::hash2(&tree_c_root, &tree_r_last_root);
+        let comm_r: <Tree::Hasher as Hasher>::Domain = <Tree::Hasher as Hasher>::Function::hash2(&tree_c_root, &tree_r_last_root);
 
         Ok((
             Tau {
@@ -849,10 +848,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
     /// Phase1 of replication.
     pub fn replicate_phase1(
-        pp: &'a PublicParams<H>,
-        replica_id: &H::Domain,
+        pp: &'a PublicParams<Tree::Hasher>,
+        replica_id: &<Tree::Hasher as Hasher>::Domain,
         config: StoreConfig,
-    ) -> Result<Labels<H>> {
+    ) -> Result<Labels<Tree::Hasher>> {
         info!("replicate_phase1");
 
         let (_, labels) = measure_op(EncodeWindowTimeAll, || {
@@ -866,15 +865,15 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     /// Phase2 of replication.
     #[allow(clippy::type_complexity)]
     pub fn replicate_phase2(
-        pp: &'a PublicParams<H>,
-        labels: Labels<H>,
+        pp: &'a PublicParams<Tree::Hasher>,
+        labels: Labels<Tree::Hasher>,
         data: Data<'a>,
         data_tree: BinaryMerkleTree<G>,
         config: StoreConfig,
         replica_path: PathBuf,
     ) -> Result<(
-        <Self as PoRep<'a, H, G>>::Tau,
-        <Self as PoRep<'a, H, G>>::ProverAux,
+        <Self as PoRep<'a, Tree, G>>::Tau,
+        <Self as PoRep<'a, Tree, G>>::ProverAux,
     )> {
         info!("replicate_phase2");
 
@@ -904,6 +903,7 @@ mod tests {
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
+    use crate::merkle::{BinaryMerkleTree, MerkleTreeTrait};
     use crate::porep::stacked::{PrivateInputs, SetupParams, EXP_DEGREE};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
@@ -921,36 +921,36 @@ mod tests {
 
     #[test]
     fn extract_all_pedersen() {
-        test_extract_all::<PedersenHasher>();
+        test_extract_all::<BinaryMerkleTree<PedersenHasher>>();
     }
 
     #[test]
     fn extract_all_sha256() {
-        test_extract_all::<Sha256Hasher>();
+        test_extract_all::<BinaryMerkleTree<Sha256Hasher>>();
     }
 
     #[test]
     fn extract_all_blake2s() {
-        test_extract_all::<Blake2sHasher>();
+        test_extract_all::<BinaryMerkleTree<Blake2sHasher>>();
     }
 
     #[test]
     fn extract_all_poseidon() {
-        test_extract_all::<PoseidonHasher>();
+        test_extract_all::<BinaryMerkleTree<PoseidonHasher>>();
     }
 
-    fn test_extract_all<H: 'static + Hasher>() {
+    fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
         // femme::pretty::Logger::new()
         //     .start(log::LevelFilter::Trace)
         //     .ok();
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
-        let replica_id: H::Domain = H::Domain::random(rng);
+        let replica_id: <Tree::Hasher as Hasher>::Domain = <Tree::Hasher as Hasher>::Domain::random(rng);
         let nodes = 64;
 
         let data: Vec<u8> = (0..nodes)
             .flat_map(|_| {
-                let v: H::Domain = H::Domain::random(rng);
+                let v: <Tree::Hasher as Hasher>::Domain = <Tree::Hasher as Hasher>::Domain::random(rng);
                 v.into_bytes()
             })
             .collect();
@@ -968,7 +968,7 @@ mod tests {
             layer_challenges: challenges.clone(),
         };
 
-        let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp).expect("setup failed");
+        let pp = StackedDrg::<Tree::Hasher, Blake2sHasher>::setup(&sp).expect("setup failed");
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
@@ -984,7 +984,7 @@ mod tests {
         let temp_path = temp_dir.path();
         let replica_path = temp_path.join("replica-path");
 
-        StackedDrg::<H, Blake2sHasher>::replicate(
+        StackedDrg::<Tree, Blake2sHasher>::replicate(
             &pp,
             &replica_id,
             (&mut data_copy[..]).into(),
@@ -996,7 +996,7 @@ mod tests {
 
         assert_ne!(data, data_copy);
 
-        let decoded_data = StackedDrg::<H, Blake2sHasher>::extract_all(
+        let decoded_data = StackedDrg::<Tree, Blake2sHasher>::extract_all(
             &pp,
             &replica_id,
             data_copy.as_mut_slice(),
@@ -1016,7 +1016,7 @@ mod tests {
         test_prove_verify::<PoseidonHasher>(n, challenges.clone());
     }
 
-    fn test_prove_verify<H: 'static + Hasher>(n: usize, challenges: LayerChallenges) {
+    fn test_prove_verify<Tree: 'static + MerkleTreeTrait>(n: usize, challenges: LayerChallenges) {
         // This will be called multiple times, only the first one succeeds, and that is ok.
         // femme::pretty::Logger::new()
         //     .start(log::LevelFilter::Trace)
@@ -1026,7 +1026,7 @@ mod tests {
 
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
-        let replica_id: H::Domain = H::Domain::random(rng);
+        let replica_id: <Tree::Hasher as Hasher>::Domain = <Tree::Hasher as Hasher>::Domain::random(rng);
         let data: Vec<u8> = (0..n)
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
@@ -1057,8 +1057,8 @@ mod tests {
         let temp_path = temp_dir.path();
         let replica_path = temp_path.join("replica-path");
 
-        let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp).expect("setup failed");
-        let (tau, (p_aux, t_aux)) = StackedDrg::<H, Blake2sHasher>::replicate(
+        let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
+        let (tau, (p_aux, t_aux)) = StackedDrg::<Tree, Blake2sHasher>::replicate(
             &pp,
             &replica_id,
             (&mut data_copy[..]).into(),
@@ -1071,7 +1071,7 @@ mod tests {
 
         let seed = rng.gen();
 
-        let pub_inputs = PublicInputs::<H::Domain, <Blake2sHasher as Hasher>::Domain> {
+        let pub_inputs = PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Blake2sHasher as Hasher>::Domain> {
             replica_id,
             seed,
             tau: Some(tau),
@@ -1083,12 +1083,12 @@ mod tests {
 
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
-        let t_aux = TemporaryAuxCache::<H, Blake2sHasher>::new(&t_aux, replica_path)
+        let t_aux = TemporaryAuxCache::<Tree, Blake2sHasher>::new(&t_aux, replica_path)
             .expect("failed to restore contents of t_aux");
 
         let priv_inputs = PrivateInputs { p_aux, t_aux };
 
-        let all_partition_proofs = &StackedDrg::<H, Blake2sHasher>::prove_all_partitions(
+        let all_partition_proofs = &StackedDrg::<Tree, Blake2sHasher>::prove_all_partitions(
             &pp,
             &pub_inputs,
             &priv_inputs,
@@ -1096,7 +1096,7 @@ mod tests {
         )
         .expect("failed to generate partition proofs");
 
-        let proofs_are_valid = StackedDrg::<H, Blake2sHasher>::verify_all_partitions(
+        let proofs_are_valid = StackedDrg::<Tree, Blake2sHasher>::verify_all_partitions(
             &pp,
             &pub_inputs,
             all_partition_proofs,
@@ -1104,7 +1104,7 @@ mod tests {
         .expect("failed to verify partition proofs");
 
         // Discard cached MTs that are no longer needed.
-        TemporaryAux::<H, Blake2sHasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
+        TemporaryAux::<Tree::Hasher, Blake2sHasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
         assert!(proofs_are_valid);
     }
@@ -1133,6 +1133,6 @@ mod tests {
 
         // When this fails, the call to setup should panic, but seems to actually hang (i.e. neither return nor panic) for some reason.
         // When working as designed, the call to setup returns without error.
-        let _pp = StackedDrg::<PedersenHasher, Blake2sHasher>::setup(&sp).expect("setup failed");
+        let _pp = StackedDrg::<BinaryMerkleTree<PedersenHasher>, Blake2sHasher>::setup(&sp).expect("setup failed");
     }
 }
