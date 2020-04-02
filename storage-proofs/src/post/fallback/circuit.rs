@@ -2,43 +2,40 @@ use std::marker::PhantomData;
 
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum::{self, marker_traits::Unsigned, U8};
-use paired::bls12_381::Bls12;
+use paired::bls12_381::{Bls12, Fr};
 
 use crate::compound_proof::CircuitComponent;
-use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph::graph_height;
 use crate::error::Result;
 use crate::gadgets::constraint;
 use crate::gadgets::por::PoRCircuit;
 use crate::gadgets::variables::Root;
-use crate::hasher::{HashFunction, Hasher, PoseidonArity, PoseidonEngine, PoseidonMDArity};
+use crate::hasher::{HashFunction, Hasher};
+use crate::merkle::{DiskStore, MerkleTreeWrapper};
 use crate::util::NODE_SIZE;
 
 use super::vanilla::{PublicParams, PublicSector, SectorProof};
 
 /// This is the `FallbackPoSt` circuit.
-pub struct FallbackPoStCircuit<'a, E: JubjubEngine, H: Hasher> {
-    pub prover_id: Option<E::Fr>,
-    pub sectors: Vec<Sector<'a, E, H>>,
+pub struct FallbackPoStCircuit<H: Hasher> {
+    pub prover_id: Option<Fr>,
+    pub sectors: Vec<Sector<H>>,
 }
 
 #[derive(Clone)]
-pub struct Sector<'a, E: JubjubEngine, H: Hasher> {
-    /// Paramters for the engine.
-    pub params: &'a E::Params,
-    pub comm_r: Option<E::Fr>,
-    pub comm_c: Option<E::Fr>,
-    pub comm_r_last: Option<E::Fr>,
-    pub leafs: Vec<Option<E::Fr>>,
+pub struct Sector<H: Hasher> {
+    pub comm_r: Option<Fr>,
+    pub comm_c: Option<Fr>,
+    pub comm_r_last: Option<Fr>,
+    pub leafs: Vec<Option<Fr>>,
     #[allow(clippy::type_complexity)]
-    pub paths: Vec<Vec<(Vec<Option<E::Fr>>, Option<usize>)>>,
-    pub id: Option<E::Fr>,
+    pub paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
+    pub id: Option<Fr>,
     pub _h: PhantomData<H>,
 }
 
-impl<'a, H: Hasher> Sector<'a, Bls12, H> {
+impl<H: Hasher> Sector<H> {
     pub fn circuit(
         sector: &PublicSector<H::Domain>,
         vanilla_proof: &SectorProof<H>,
@@ -65,7 +62,6 @@ impl<'a, H: Hasher> Sector<'a, Bls12, H> {
             .collect();
 
         Ok(Sector {
-            params: &*JJ_PARAMS,
             leafs,
             id: Some(sector.id.into()),
             comm_r: Some(sector.comm_r.into()),
@@ -85,7 +81,6 @@ impl<'a, H: Hasher> Sector<'a, Bls12, H> {
             vec![vec![(vec![None; U8::to_usize() - 1], None); height - 1]; challenges_count];
 
         Sector {
-            params: &*JJ_PARAMS,
             id: None,
             comm_r: None,
             comm_c: None,
@@ -97,20 +92,8 @@ impl<'a, H: Hasher> Sector<'a, Bls12, H> {
     }
 }
 
-impl<
-        'a,
-        E: JubjubEngine
-            + PoseidonEngine<typenum::U8>
-            + PoseidonEngine<typenum::U2>
-            + PoseidonEngine<PoseidonMDArity>,
-        H: Hasher,
-    > Circuit<E> for &Sector<'a, E, H>
-where
-    typenum::U8: PoseidonArity<E>,
-{
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        let params = self.params;
-
+impl<H: Hasher> Circuit<Bls12> for &Sector<H> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let Sector {
             comm_r,
             comm_c,
@@ -149,7 +132,6 @@ where
                 cs.namespace(|| "H_comm_c_comm_r_last"),
                 &comm_c_num,
                 &comm_r_last_num,
-                params,
             )?;
 
             // Check actual equality
@@ -163,9 +145,10 @@ where
 
         // 2. Verify Inclusion Paths
         for (i, (leaf, path)) in leafs.iter().zip(paths.iter()).enumerate() {
-            PoRCircuit::<typenum::U8, E, H>::synthesize(
+            PoRCircuit::<
+                MerkleTreeWrapper<H, DiskStore<H::Domain>, typenum::U8, typenum::U0, typenum::U0>,
+            >::synthesize(
                 cs.namespace(|| format!("challenge_inclusion_{}", i)),
-                &params,
                 Root::Val(*leaf),
                 path.clone(),
                 Root::from_allocated::<CS>(comm_r_last_num.clone()),
@@ -180,22 +163,12 @@ where
 #[derive(Clone, Default)]
 pub struct ComponentPrivateInputs {}
 
-impl<'a, E: JubjubEngine, H: Hasher> CircuitComponent for FallbackPoStCircuit<'a, E, H> {
+impl<H: Hasher> CircuitComponent for FallbackPoStCircuit<H> {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<
-        'a,
-        E: JubjubEngine
-            + PoseidonEngine<typenum::U8>
-            + PoseidonEngine<typenum::U2>
-            + PoseidonEngine<PoseidonMDArity>,
-        H: Hasher,
-    > Circuit<E> for FallbackPoStCircuit<'a, E, H>
-where
-    typenum::U8: PoseidonArity<E>,
-{
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<H: Hasher> Circuit<Bls12> for FallbackPoStCircuit<H> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         for (i, sector) in self.sectors.iter().enumerate() {
             let cs = &mut cs.namespace(|| format!("sector_{}", i));
 
@@ -313,7 +286,7 @@ mod tests {
 
         for i in 0..total_sector_count {
             let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+                .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
                 .collect();
 
             let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
@@ -428,7 +401,7 @@ mod tests {
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let instance = FallbackPoStCircuit::<_, H> {
+            let instance = FallbackPoStCircuit::<H> {
                 sectors: circuit_sectors,
                 prover_id: Some(prover_id.into()),
             };

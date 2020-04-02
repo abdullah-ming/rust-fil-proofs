@@ -13,8 +13,7 @@ use crate::error::*;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::Hasher;
 use crate::merkle::{
-    create_lcmerkle_tree, create_merkle_tree, open_lcmerkle_tree, LCMerkleTree, MerkleTree,
-    MerkleTreeTrait,
+    create_lcmerkle_tree, create_merkle_tree, open_lcmerkle_tree, LCMerkleTree, MerkleTreeTrait,
 };
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node_offset, NODE_SIZE};

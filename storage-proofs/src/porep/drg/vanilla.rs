@@ -16,8 +16,7 @@ use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, HashFunction, Hasher, PoseidonArity};
 use crate::merkle::{
-    BinaryLCMerkleTree, BinaryTree, DiskStore, LCMerkleTree, MerkleProof, MerkleProofTrait,
-    MerkleTreeTrait, MerkleTreeWrapper,
+    BinaryLCMerkleTree, BinaryTree, LCMerkleTree, MerkleProof, MerkleProofTrait, MerkleTreeTrait,
 };
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::PoRep;
