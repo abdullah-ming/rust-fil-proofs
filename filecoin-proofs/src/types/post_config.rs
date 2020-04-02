@@ -56,8 +56,7 @@ impl PoStConfig {
 
                 Ok(
                     <ElectionPoStCompound<DefaultTreeHasher> as CacheableParameters<
-                        Bls12,
-                        ElectionPoStCircuit<_, DefaultTreeHasher>,
+                        ElectionPoStCircuit<DefaultTreeHasher>,
                         _,
                     >>::cache_identifier(&params),
                 )
@@ -67,8 +66,7 @@ impl PoStConfig {
 
                 Ok(
                     <fallback::FallbackPoStCompound<DefaultTreeHasher> as CacheableParameters<
-                        Bls12,
-                        fallback::FallbackPoStCircuit<_, DefaultTreeHasher>,
+                        fallback::FallbackPoStCircuit<DefaultTreeHasher>,
                         _,
                     >>::cache_identifier(&params),
                 )
@@ -78,8 +76,7 @@ impl PoStConfig {
 
                 Ok(
                     <fallback::FallbackPoStCompound<DefaultTreeHasher> as CacheableParameters<
-                        Bls12,
-                        fallback::FallbackPoStCircuit<_, DefaultTreeHasher>,
+                        fallback::FallbackPoStCircuit<DefaultTreeHasher>,
                         _,
                     >>::cache_identifier(&params),
                 )

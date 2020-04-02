@@ -487,7 +487,7 @@ mod tests {
     use std::sync::Once;
 
     use ff::Field;
-    use paired::bls12_381::{Bls12, Fr};
+    use paired::bls12_381::Fr;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use storage_proofs::fr32::bytes_into_fr;

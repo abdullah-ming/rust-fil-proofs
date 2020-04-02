@@ -208,7 +208,7 @@ fn blank_porep_poseidon_circuit(
 /*
 fn blank_porep_sha_pedersen_circuit(
     sector_size: u64,
-) -> StackedCircuit<'static, Bls12, PedersenHasher, Sha256Hasher> {
+) -> StackedCircuit<'static, PedersenHasher, Sha256Hasher> {
     let	n_partitions = *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap();
 
     let porep_config = PoRepConfig {
@@ -260,7 +260,7 @@ fn blank_election_post_poseidon_circuit(sector_size: u64) -> ElectionPoStCircuit
 /*
 fn blank_election_post_sha_pedersen_circuit(
     sector_size: u64,
-) -> ElectionPoStCircuit<'static, Bls12, PedersenHasher> {
+) -> ElectionPoStCircuit<'static, PedersenHasher> {
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size),
         challenge_count: POST_CHALLENGE_COUNT,
@@ -271,16 +271,13 @@ fn blank_election_post_sha_pedersen_circuit(
     let public_params = post_public_params(post_config).unwrap();
 
     <ElectionPoStCompound<PedersenHasher> as CompoundProof<
-        Bls12,
         ElectionPoSt<PedersenHasher>,
-        ElectionPoStCircuit<Bls12, PedersenHasher>,
+        ElectionPoStCircuit<PedersenHasher>,
     >>::blank_circuit(&public_params)
 }
 */
 
-fn blank_winning_post_poseidon_circuit(
-    sector_size: u64,
-) -> FallbackPoStCircuit<'static, Bls12, PoseidonHasher> {
+fn blank_winning_post_poseidon_circuit(sector_size: u64) -> FallbackPoStCircuit<PoseidonHasher> {
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size),
         challenge_count: WINNING_POST_CHALLENGE_COUNT,
@@ -292,15 +289,12 @@ fn blank_winning_post_poseidon_circuit(
     let public_params = winning_post_public_params(&post_config).unwrap();
 
     <FallbackPoStCompound<PoseidonHasher> as CompoundProof<
-        Bls12,
         FallbackPoSt<PoseidonHasher>,
-        FallbackPoStCircuit<Bls12, PoseidonHasher>,
+        FallbackPoStCircuit<PoseidonHasher>,
     >>::blank_circuit(&public_params)
 }
 
-fn blank_window_post_poseidon_circuit(
-    sector_size: u64,
-) -> FallbackPoStCircuit<'static, Bls12, PoseidonHasher> {
+fn blank_window_post_poseidon_circuit(sector_size: u64) -> FallbackPoStCircuit<PoseidonHasher> {
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size),
         challenge_count: WINDOW_POST_CHALLENGE_COUNT,
@@ -316,9 +310,8 @@ fn blank_window_post_poseidon_circuit(
     let public_params = window_post_public_params(&post_config).unwrap();
 
     <FallbackPoStCompound<PoseidonHasher> as CompoundProof<
-        Bls12,
         FallbackPoSt<PoseidonHasher>,
-        FallbackPoStCircuit<Bls12, PoseidonHasher>,
+        FallbackPoStCircuit<PoseidonHasher>,
     >>::blank_circuit(&public_params)
 }
 /*

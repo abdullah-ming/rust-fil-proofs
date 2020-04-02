@@ -138,11 +138,10 @@ fn cache_winning_post_params(post_config: &PoStConfig) {
     let post_public_params = winning_post_public_params(post_config).unwrap();
 
     {
-        let post_circuit: FallbackPoStCircuit<Bls12, DefaultTreeHasher> =
+        let post_circuit: FallbackPoStCircuit<DefaultTreeHasher> =
             <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
                 FallbackPoSt<DefaultTreeHasher>,
-                FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+                FallbackPoStCircuit<DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
         let _ = <FallbackPoStCompound<DefaultTreeHasher>>::get_param_metadata(
             post_circuit,
@@ -151,11 +150,10 @@ fn cache_winning_post_params(post_config: &PoStConfig) {
         .expect("failed to get metadata");
     }
     {
-        let post_circuit: FallbackPoStCircuit<Bls12, DefaultTreeHasher> =
+        let post_circuit: FallbackPoStCircuit<DefaultTreeHasher> =
             <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
                 FallbackPoSt<DefaultTreeHasher>,
-                FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+                FallbackPoStCircuit<DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
         <FallbackPoStCompound<DefaultTreeHasher>>::get_groth_params(
             Some(&mut OsRng),
@@ -165,11 +163,10 @@ fn cache_winning_post_params(post_config: &PoStConfig) {
         .expect("failed to get groth params");
     }
     {
-        let post_circuit: FallbackPoStCircuit<Bls12, DefaultTreeHasher> =
+        let post_circuit: FallbackPoStCircuit<DefaultTreeHasher> =
             <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
                 FallbackPoSt<DefaultTreeHasher>,
-                FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+                FallbackPoStCircuit<DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
 
         <FallbackPoStCompound<DefaultTreeHasher>>::get_verifying_key(
@@ -191,11 +188,10 @@ fn cache_window_post_params(post_config: &PoStConfig) {
     let post_public_params = window_post_public_params(post_config).unwrap();
 
     {
-        let post_circuit: FallbackPoStCircuit<Bls12, DefaultTreeHasher> =
+        let post_circuit: FallbackPoStCircuit<DefaultTreeHasher> =
             <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
                 FallbackPoSt<DefaultTreeHasher>,
-                FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+                FallbackPoStCircuit<DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
         let _ = <FallbackPoStCompound<DefaultTreeHasher>>::get_param_metadata(
             post_circuit,
@@ -204,11 +200,10 @@ fn cache_window_post_params(post_config: &PoStConfig) {
         .expect("failed to get metadata");
     }
     {
-        let post_circuit: FallbackPoStCircuit<Bls12, DefaultTreeHasher> =
+        let post_circuit: FallbackPoStCircuit<DefaultTreeHasher> =
             <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
                 FallbackPoSt<DefaultTreeHasher>,
-                FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+                FallbackPoStCircuit<DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
         <FallbackPoStCompound<DefaultTreeHasher>>::get_groth_params(
             Some(&mut OsRng),
@@ -218,11 +213,10 @@ fn cache_window_post_params(post_config: &PoStConfig) {
         .expect("failed to get groth params");
     }
     {
-        let post_circuit: FallbackPoStCircuit<Bls12, DefaultTreeHasher> =
+        let post_circuit: FallbackPoStCircuit<DefaultTreeHasher> =
             <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
                 FallbackPoSt<DefaultTreeHasher>,
-                FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+                FallbackPoStCircuit<DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
 
         <FallbackPoStCompound<DefaultTreeHasher>>::get_verifying_key(
