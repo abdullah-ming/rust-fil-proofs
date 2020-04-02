@@ -296,7 +296,7 @@ mod tests {
     use crate::hasher::{
         Blake2sHasher, PedersenHasher, PoseidonArity, PoseidonHasher, Sha256Hasher,
     };
-    use crate::merkle::{make_proof_for_test, MerkleProof};
+    use crate::merkle::MerkleProof;
 
     fn test_rational_post<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
@@ -417,11 +417,12 @@ mod tests {
     ) -> MerkleProof<H, U> {
         let bogus_leaf: H::Domain = H::Domain::random(rng);
 
-        make_proof_for_test::<MerkleProof<H, U, typenum::U0, typenum::U0>>(
-            pub_inputs.comm_rs[0],
-            bogus_leaf,
-            vec![(vec![bogus_leaf; U::to_usize() - 1], 1)],
-        )
+        todo!();
+        // make_proof_for_test::<MerkleProof<H, U, typenum::U0, typenum::U0>>(
+        //     pub_inputs.comm_rs[0],
+        //     bogus_leaf,
+        //     vec![(vec![bogus_leaf; U::to_usize() - 1], 1)],
+        // )
     }
 
     fn test_rational_post_validates<H: Hasher>() {
