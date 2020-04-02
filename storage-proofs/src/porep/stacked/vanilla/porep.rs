@@ -13,9 +13,14 @@ use crate::Data;
 
 use merkletree::store::StoreConfig;
 
-impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree, G> for StackedDrg<'a, Tree, G> {
+impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::Hasher, G>
+    for StackedDrg<'a, Tree, G>
+{
     type Tau = Tau<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>;
-    type ProverAux = (PersistentAux<<Tree::Hasher as Hasher>::Domain>, TemporaryAux<Tree::Hasher, G>);
+    type ProverAux = (
+        PersistentAux<<Tree::Hasher as Hasher>::Domain>,
+        TemporaryAux<Tree::Hasher, G>,
+    );
 
     fn replicate(
         pp: &'a PublicParams<Tree::Hasher>,
