@@ -157,7 +157,7 @@ mod tests {
     use crate::hasher::{
         Blake2sHasher, HashFunction, PedersenHasher, PoseidonHasher, Sha256Hasher,
     };
-    use crate::merkle::{make_proof_for_test, DiskStore, MerkleProofTrait, MerkleTreeWrapper};
+    use crate::merkle::{DiskStore, MerkleProofTrait, MerkleTreeWrapper};
     use crate::util::data_at_node;
 
     fn test_merklepor<Tree: MerkleTreeTrait>() {
@@ -252,14 +252,15 @@ mod tests {
         let bogus_leaf = <Proof::Hasher as Hasher>::Domain::random(rng);
         let hashed_leaf = <Proof::Hasher as Hasher>::Function::hash_leaf(&bogus_leaf);
 
-        DataProof {
-            data: bogus_leaf,
-            proof: make_proof_for_test::<Proof>(
-                pub_inputs.commitment.unwrap(),
-                hashed_leaf,
-                vec![(vec![hashed_leaf; Proof::Arity::to_usize() - 1], 1)],
-            ),
-        }
+        todo!()
+        // DataProof {
+        //     data: bogus_leaf,
+        //     proof: make_proof_for_test::<Proof>(
+        //         pub_inputs.commitment.unwrap(),
+        //         hashed_leaf,
+        //         vec![(vec![hashed_leaf; Proof::Arity::to_usize() - 1], 1)],
+        //     ),
+        // }
     }
 
     fn test_merklepor_validates<Tree: MerkleTreeTrait>() {

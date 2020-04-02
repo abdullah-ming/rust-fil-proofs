@@ -225,14 +225,6 @@ macro_rules! forward_method {
     };
 }
 
-pub fn make_proof_for_test<Proof: MerkleProofTrait>(
-    root: <Proof::Hasher as Hasher>::Domain,
-    leaf: <Proof::Hasher as Hasher>::Domain,
-    path: Vec<(Vec<<Proof::Hasher as Hasher>::Domain>, usize)>,
-) -> Proof {
-    todo!()
-}
-
 impl<
         H: Hasher,
         Arity: 'static + PoseidonArity,
@@ -1056,7 +1048,9 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
     }
 
     fn path(&self) -> Vec<(Vec<H::Domain>, usize)> {
-        self.base_proof.path()
+        let mut path = self.base_proof.path();
+        path.extend_from_slice(&self.sub_proof.path());
+        path
     }
 
     fn proves_challenge(&self, challenge: usize) -> bool {
@@ -1162,7 +1156,10 @@ impl<
     }
 
     fn path(&self) -> Vec<(Vec<H::Domain>, usize)> {
-        self.base_proof.path()
+        let mut path = self.base_proof.path();
+        path.extend_from_slice(&self.sub_proof.path());
+        path.extend_from_slice(&self.top_proof.path());
+        path
     }
 
     fn proves_challenge(&self, challenge: usize) -> bool {
