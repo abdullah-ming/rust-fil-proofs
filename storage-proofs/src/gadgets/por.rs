@@ -537,17 +537,12 @@ mod tests {
         for i in 0..leaves {
             // -- Basic Setup
 
-            // let data: Vec<u8> = (0..leaves)
-            //     .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
-            //     .collect();
-
-            // let graph =
-            //     BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-            // let tree = graph.merkle_tree::<Tree>(None, data.as_slice()).unwrap();
-
             let (data, tree) = generate_top_tree::<Tree, _>(rng, leaves);
             // -- PoR
-
+            dbg!(&data
+                .chunks(32)
+                .map(|x| <Tree::Hasher as Hasher>::Domain::try_from_bytes(x))
+                .collect::<Vec<_>>());
             let pub_params = por::PublicParams {
                 leaves,
                 private: true,
@@ -556,14 +551,13 @@ mod tests {
                 challenge: i,
                 commitment: Some(tree.root()),
             };
-
-            let priv_inputs = por::PrivateInputs::<ResTree<Tree>>::new(
-                <Tree::Hasher as Hasher>::Domain::try_from_bytes(
-                    data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
-                )
-                .unwrap(),
-                &tree,
-            );
+            let leaf = data_at_node(data.as_slice(), pub_inputs.challenge).unwrap();
+            let leaf_element = <Tree::Hasher as Hasher>::Domain::try_from_bytes(leaf).unwrap();
+            let priv_inputs = por::PrivateInputs::<ResTree<Tree>>::new(leaf_element, &tree);
+            dbg!(&priv_inputs, &data[i], &leaf_element);
+            let p = tree.gen_proof(i).unwrap();
+            assert!(p.verify());
+            dbg!(&i, p.verify(), &p);
 
             // create a non circuit proof
             let proof = por::PoR::<ResTree<Tree>>::prove(&pub_params, &pub_inputs, &priv_inputs)
