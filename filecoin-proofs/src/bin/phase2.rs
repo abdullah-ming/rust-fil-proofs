@@ -175,7 +175,7 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, u64, String, usize) {
 
 fn blank_porep_poseidon_circuit(
     sector_size: u64,
-) -> StackedCircuit<'static, PoseidonHasher, Sha256Hasher> {
+) -> StackedCircuit<'static, DefaultBinaryTree, Sha256Hasher> {
     let n_partitions = *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap();
 
     let porep_config = PoRepConfig {
@@ -193,14 +193,14 @@ fn blank_porep_poseidon_circuit(
         priority: false,
     };
 
-    let public_params = <StackedCompound<PoseidonHasher, Sha256Hasher> as CompoundProof<
-        StackedDrg<PoseidonHasher, Sha256Hasher>,
+    let public_params = <StackedCompound<DefaultBinaryTree, Sha256Hasher> as CompoundProof<
+        StackedDrg<DefaultBinaryTree, Sha256Hasher>,
         _,
     >>::setup(&setup_params)
     .unwrap();
 
-    <StackedCompound<PoseidonHasher, Sha256Hasher> as CompoundProof<
-        StackedDrg<PoseidonHasher, Sha256Hasher>,
+    <StackedCompound<DefaultBinaryTree, Sha256Hasher> as CompoundProof<
+        StackedDrg<DefaultBinaryTree, Sha256Hasher>,
         _,
     >>::blank_circuit(&public_params.vanilla_params)
 }

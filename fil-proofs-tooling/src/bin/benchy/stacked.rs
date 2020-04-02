@@ -19,6 +19,7 @@ use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::*;
 use storage_proofs::gadgets::BenchCS;
 use storage_proofs::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, Sha256Hasher};
+use storage_proofs::merkle::{MerkleTreeTrait, BinaryMerkleTree};
 use storage_proofs::porep::stacked::StackedCompound;
 use storage_proofs::porep::stacked::{
     self, ChallengeRequirements, LayerChallenges, StackedDrg, TemporaryAuxCache, BINARY_ARITY,
@@ -143,7 +144,7 @@ where
             layer_challenges: layer_challenges.clone(),
         };
 
-        let pp = StackedDrg::<H, Sha256Hasher>::setup(&sp)?;
+        let pp = StackedDrg::<BinaryMerkleTree<H>, Sha256Hasher>::setup(&sp)?;
 
         let (pub_in, priv_in, d) = if *bench_only {
             (None, None, None)
@@ -162,7 +163,7 @@ where
                 wall_time: replication_wall_time,
                 return_value: (pub_inputs, priv_inputs),
             } = measure(|| {
-                let (tau, (p_aux, t_aux)) = StackedDrg::<H, Sha256Hasher>::replicate(
+                let (tau, (p_aux, t_aux)) = StackedDrg::<BinaryMerkleTree<H>, Sha256Hasher>::replicate(
                     &pp,
                     &replica_id,
                     (&mut data[..]).into(),
@@ -217,7 +218,7 @@ where
                 wall_time: vanilla_proving_wall_time,
                 return_value: all_partition_proofs,
             } = measure(|| {
-                StackedDrg::<H, Sha256Hasher>::prove_all_partitions(
+                StackedDrg::<BinaryMerkleTree<H>, Sha256Hasher>::prove_all_partitions(
                     &pp,
                     &pub_inputs,
                     &priv_inputs,
@@ -245,7 +246,7 @@ where
 
             for _ in 0..*samples {
                 let m = measure(|| {
-                    let verified = StackedDrg::<H, Sha256Hasher>::verify_all_partitions(
+                    let verified = StackedDrg::<BinaryMerkleTree<H>, Sha256Hasher>::verify_all_partitions(
                         &pp,
                         &pub_inputs,
                         &all_partition_proofs,
@@ -292,7 +293,7 @@ where
         if let Some(data) = d {
             if *extract {
                 let m = measure(|| {
-                    StackedDrg::<H, Sha256Hasher>::extract_all(
+                    StackedDrg::<BinaryMerkleTree<H>, Sha256Hasher>::extract_all(
                         &pp,
                         &replica_id,
                         &data,
@@ -326,10 +327,10 @@ struct CircuitWorkMeasurement {
     wall_time: Duration,
 }
 
-fn do_circuit_work<H: 'static + Hasher>(
-    pp: &<StackedDrg<H, Sha256Hasher> as ProofScheme>::PublicParams,
-    pub_in: Option<<StackedDrg<H, Sha256Hasher> as ProofScheme>::PublicInputs>,
-    priv_in: Option<<StackedDrg<H, Sha256Hasher> as ProofScheme>::PrivateInputs>,
+fn do_circuit_work<Tree: 'static + MerkleTreeTrait>(
+    pp: &<StackedDrg<Tree, Sha256Hasher> as ProofScheme>::PublicParams,
+    pub_in: Option<<StackedDrg<Tree, Sha256Hasher> as ProofScheme>::PublicInputs>,
+    priv_in: Option<<StackedDrg<Tree, Sha256Hasher> as ProofScheme>::PrivateInputs>,
     params: &Params,
     report: &mut Report,
 ) -> anyhow::Result<CircuitWorkMeasurement> {
@@ -355,7 +356,7 @@ fn do_circuit_work<H: 'static + Hasher>(
     if *bench || *circuit || *bench_only {
         info!("Generating blank circuit: start");
         let mut cs = BenchCS::<Bls12>::new();
-        <StackedCompound<_, _> as CompoundProof<StackedDrg<H, Sha256Hasher>, _>>::blank_circuit(
+        <StackedCompound<_, _> as CompoundProof<StackedDrg<Tree, Sha256Hasher>, _>>::blank_circuit(
             &pp,
         )
         .synthesize(&mut cs)?;
@@ -374,7 +375,7 @@ fn do_circuit_work<H: 'static + Hasher>(
         // We should also allow the serialized vanilla proofs to be passed (as a file) to the example
         // and skip replication/vanilla-proving entirely.
         let gparams =
-            <StackedCompound<_, _> as CompoundProof<StackedDrg<H, Sha256Hasher>, _>>::groth_params::<
+            <StackedCompound<_, _> as CompoundProof<StackedDrg<Tree, Sha256Hasher>, _>>::groth_params::<
                 rand::rngs::OsRng,
             >(None, &compound_public_params.vanilla_params)?;
 

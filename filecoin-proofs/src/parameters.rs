@@ -25,7 +25,7 @@ pub fn public_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
 ) -> Result<stacked::PublicParams<DefaultTreeHasher>> {
-    StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::setup(&setup_params(
+    StackedDrg::<DefaultBinaryTree, DefaultPieceHasher>::setup(&setup_params(
         sector_bytes,
         partitions,
     )?)

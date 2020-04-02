@@ -1,6 +1,6 @@
 use bellperson::Circuit;
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::constants::{DefaultTreeHasher, POREP_PARTITIONS};
+use filecoin_proofs::constants::{DefaultTreeHasher, DefaultBinaryTree, POREP_PARTITIONS};
 use filecoin_proofs::parameters::election_post_public_params;
 use filecoin_proofs::types::PaddedBytesAmount;
 use filecoin_proofs::types::*;
@@ -31,6 +31,7 @@ const SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
 ];
 
+type FlarpTree = DefaultBinaryTree;
 type FlarpHasher = DefaultTreeHasher;
 
 #[derive(Default, Debug, Serialize)]
@@ -388,10 +389,10 @@ fn measure_porep_circuit(i: &FlarpInputs) -> usize {
         layer_challenges,
     };
 
-    let pp = StackedDrg::<FlarpHasher, Sha256Hasher>::setup(&sp).unwrap();
+    let pp = StackedDrg::<FlarpTree, Sha256Hasher>::setup(&sp).unwrap();
 
     let mut cs = BenchCS::<Bls12>::new();
-    <StackedCompound<_, _> as CompoundProof<StackedDrg<FlarpHasher, Sha256Hasher>, _>>::blank_circuit(
+    <StackedCompound<_, _> as CompoundProof<StackedDrg<FlarpTree, Sha256Hasher>, _>>::blank_circuit(
         &pp,
     )
     .synthesize(&mut cs)
@@ -463,19 +464,19 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     .unwrap();
 
     {
-        let circuit = <StackedCompound<_, _> as CompoundProof<
-            StackedDrg<FlarpHasher, Sha256Hasher>,
+        let circuit = <StackedCompound<FlarpTree, _> as CompoundProof<
+            StackedDrg<FlarpTree, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
-        StackedCompound::<FlarpHasher, Sha256Hasher>::get_param_metadata(circuit, &public_params)
+        StackedCompound::<FlarpTree, Sha256Hasher>::get_param_metadata(circuit, &public_params)
             .expect("cannot get param metadata");
     }
     {
-        let circuit = <StackedCompound<_, _> as CompoundProof<
-            StackedDrg<FlarpHasher, Sha256Hasher>,
+        let circuit = <StackedCompound<FlarpTree, _> as CompoundProof<
+            StackedDrg<FlarpTree, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
-        StackedCompound::<FlarpHasher, Sha256Hasher>::get_groth_params(
+        StackedCompound::<FlarpTree, Sha256Hasher>::get_groth_params(
             Some(&mut XorShiftRng::from_seed(SEED)),
             circuit,
             &public_params,
@@ -483,12 +484,12 @@ fn cache_porep_params(porep_config: PoRepConfig) {
         .expect("failed to get groth params");
     }
     {
-        let circuit = <StackedCompound<_, _> as CompoundProof<
-            StackedDrg<FlarpHasher, Sha256Hasher>,
+        let circuit = <StackedCompound<FlarpTree, _> as CompoundProof<
+            StackedDrg<FlarpTree, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
 
-        StackedCompound::<FlarpHasher, Sha256Hasher>::get_verifying_key(
+        StackedCompound::<FlarpTree, Sha256Hasher>::get_verifying_key(
             Some(&mut XorShiftRng::from_seed(SEED)),
             circuit,
             &public_params,

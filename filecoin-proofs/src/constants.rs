@@ -117,6 +117,10 @@ pub type DefaultPieceDomain = <DefaultPieceHasher as Hasher>::Domain;
 pub type DefaultTreeHasher = storage_proofs::hasher::PoseidonHasher;
 pub type DefaultTreeDomain = <DefaultTreeHasher as Hasher>::Domain;
 
+// FIXME: default(s) should be ?
+pub type DefaultBinaryTree = storage_proofs::merkle::BinaryMerkleTree<DefaultTreeHasher>;
+pub type DefaultOctTree = storage_proofs::merkle::OctMerkleTree<DefaultTreeHasher>;
+
 /// Get the correct parameter data for a given cache id.
 pub fn get_parameter_data(cache_id: &str) -> Option<&ParameterData> {
     PARAMETERS.get(&parameter_id(cache_id))

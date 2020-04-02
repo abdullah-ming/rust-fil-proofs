@@ -42,21 +42,21 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     .unwrap();
 
     {
-        let circuit = <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        let circuit = <StackedCompound<DefaultBinaryTree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<DefaultBinaryTree, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
-        let _ = StackedCompound::<DefaultTreeHasher, DefaultPieceHasher>::get_param_metadata(
+        let _ = StackedCompound::<DefaultBinaryTree, DefaultPieceHasher>::get_param_metadata(
             circuit,
             &public_params,
         );
     }
     {
-        let circuit = <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        let circuit = <StackedCompound<DefaultBinaryTree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<DefaultBinaryTree, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
-        StackedCompound::<DefaultTreeHasher, DefaultPieceHasher>::get_groth_params(
+        StackedCompound::<DefaultBinaryTree, DefaultPieceHasher>::get_groth_params(
             Some(&mut OsRng),
             circuit,
             &public_params,
@@ -64,12 +64,12 @@ fn cache_porep_params(porep_config: PoRepConfig) {
         .expect("failed to get groth params");
     }
     {
-        let circuit = <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        let circuit = <StackedCompound<DefaultBinaryTree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<DefaultBinaryTree, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
 
-        StackedCompound::<DefaultTreeHasher, DefaultPieceHasher>::get_verifying_key(
+        StackedCompound::<DefaultBinaryTree, DefaultPieceHasher>::get_verifying_key(
             Some(&mut OsRng),
             circuit,
             &public_params,

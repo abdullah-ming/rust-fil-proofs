@@ -12,7 +12,7 @@ use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs::post::election::{ElectionPoSt, ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::post::fallback;
 
-use crate::constants::{DefaultPieceHasher, DefaultTreeHasher};
+use crate::constants::{DefaultPieceHasher, DefaultTreeHasher, DefaultBinaryTree};
 use crate::parameters::{
     election_post_public_params, public_params, window_post_public_params,
     winning_post_public_params,
@@ -86,8 +86,8 @@ pub fn get_stacked_params(porep_config: PoRepConfig) -> Result<Arc<Bls12GrothPar
     )?;
 
     let parameters_generator = || {
-        <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        <StackedCompound<DefaultBinaryTree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<DefaultBinaryTree, DefaultPieceHasher>,
             _,
         >>::groth_params::<rand::rngs::OsRng>(None, &public_params)
         .map_err(Into::into)
@@ -171,8 +171,8 @@ pub fn get_stacked_verifying_key(porep_config: PoRepConfig) -> Result<Arc<Bls12V
     )?;
 
     let vk_generator = || {
-        <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        <StackedCompound<DefaultBinaryTree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<DefaultBinaryTree, DefaultPieceHasher>,
             _,
         >>::verifying_key::<rand::rngs::OsRng>(None, &public_params)
         .map_err(Into::into)
