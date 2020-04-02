@@ -262,7 +262,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         vanilla_proof: &'b <StackedDrg<H, G> as ProofScheme>::Proof,
         public_params: &'b <StackedDrg<H, G> as ProofScheme>::PublicParams,
         _partition_k: Option<usize>,
-    ) -> Result<StackedCircuit<'a, Bls12, H, G>> {
+    ) -> Result<StackedCircuit<'a, H, G>> {
         ensure!(
             !vanilla_proof.is_empty(),
             "Cannot create a circuit with no vanilla proofs"

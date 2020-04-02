@@ -95,7 +95,7 @@ where
         vanilla_proof: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::Proof,
         _pub_params: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
-    ) -> Result<ElectionPoStCircuit<'a, Bls12, H>> {
+    ) -> Result<ElectionPoStCircuit<H>> {
         let comm_r = pub_in.comm_r.into();
         let comm_c = vanilla_proof.comm_c.into();
         let comm_r_last = vanilla_proof.comm_r_last().into();

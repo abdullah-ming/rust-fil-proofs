@@ -2,7 +2,6 @@ use std::marker::PhantomData;
 
 use anyhow::{anyhow, ensure};
 use bellperson::Circuit;
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
@@ -10,6 +9,7 @@ use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::error::Result;
 use crate::gadgets::por::PoRCompound;
 use crate::hasher::Hasher;
+use crate::merkle::{DiskStore, MerkleTreeWrapper};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por;
 use crate::post::fallback::{self, FallbackPoSt, FallbackPoStCircuit};
@@ -25,15 +25,15 @@ where
     _h: PhantomData<H>,
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher>
-    CacheableParameters<E, C, P> for FallbackPoStCompound<H>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata, H: Hasher> CacheableParameters<C, P>
+    for FallbackPoStCompound<H>
 {
     fn cache_prefix() -> String {
         format!("proof-of-spacetime-fallback-{}", H::name())
     }
 }
 
-impl<'a, H> CompoundProof<'a, Bls12, FallbackPoSt<'a, H>, FallbackPoStCircuit<'a, Bls12, H>>
+impl<'a, H> CompoundProof<'a, FallbackPoSt<'a, H>, FallbackPoStCircuit<H>>
     for FallbackPoStCompound<H>
 where
     H: 'a + Hasher,
@@ -80,10 +80,16 @@ where
                     commitment: None,
                     challenge: challenged_leaf_start as usize,
                 };
-                let por_inputs = PoRCompound::<H, typenum::U8>::generate_public_inputs(
-                    &por_pub_inputs,
-                    &por_pub_params,
-                    partition_k,
+                let por_inputs = PoRCompound::<
+                    MerkleTreeWrapper<
+                        H,
+                        DiskStore<H::Domain>,
+                        typenum::U8,
+                        typenum::U0,
+                        typenum::U0,
+                    >,
+                >::generate_public_inputs(
+                    &por_pub_inputs, &por_pub_params, partition_k
                 )?;
 
                 inputs.extend(por_inputs);
@@ -103,11 +109,11 @@ where
 
     fn circuit(
         pub_in: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
-        _priv_in: <FallbackPoStCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
+        _priv_in: <FallbackPoStCircuit<H> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::Proof,
         pub_params: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
         partition_k: Option<usize>,
-    ) -> Result<FallbackPoStCircuit<'a, Bls12, H>> {
+    ) -> Result<FallbackPoStCircuit<H>> {
         let num_sectors_per_chunk = pub_params.sector_count;
         ensure!(
             pub_params.sector_count == vanilla_proof.sectors.len(),
@@ -146,7 +152,7 @@ where
 
     fn blank_circuit(
         pub_params: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
-    ) -> FallbackPoStCircuit<'a, Bls12, H> {
+    ) -> FallbackPoStCircuit<H> {
         let sectors = (0..pub_params.sector_count)
             .map(|_| Sector::blank_circuit(pub_params))
             .collect();
@@ -247,7 +253,7 @@ mod tests {
 
         for i in 0..total_sector_count {
             let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+                .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
                 .collect();
 
             let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();

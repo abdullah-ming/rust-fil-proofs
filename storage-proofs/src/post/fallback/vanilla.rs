@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use crate::drgraph::graph_height;
 use crate::error::Result;
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{MerkleProof, OctLCMerkleTree};
+use crate::merkle::{MerkleProof, MerkleProofTrait, OctLCMerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::stacked::OCT_ARITY;
 use crate::proof::ProofScheme;
@@ -127,7 +127,7 @@ impl<H: Hasher> SectorProof<H> {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn paths(&self) -> Vec<&Vec<(Vec<H::Domain>, usize)>> {
+    pub fn paths(&self) -> Vec<Vec<(Vec<H::Domain>, usize)>> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::path)
@@ -322,7 +322,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
 
                         let proof =
                             tree.gen_cached_proof(challenged_leaf_start as usize, levels)?;
-                        Ok(MerkleProof::new_from_proof(&proof))
+                        MerkleProof::new_from_proof(&proof)
                     })
                     .collect::<Result<Vec<_>>>()?;
 
@@ -459,7 +459,7 @@ mod tests {
     use std::io::prelude::*;
 
     use ff::Field;
-    use paired::bls12_381::{Bls12, Fr};
+    use paired::bls12_381::Fr;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
@@ -501,7 +501,7 @@ mod tests {
 
         for i in 0..total_sector_count {
             let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+                .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
                 .collect();
 
             let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();

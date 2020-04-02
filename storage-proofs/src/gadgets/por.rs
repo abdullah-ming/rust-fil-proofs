@@ -74,12 +74,12 @@ impl<'a, Tree: 'a + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircuit<Tre
     for PoRCompound<Tree>
 {
     fn circuit<'b>(
-        public_inputs: &<PoR<H, U> as ProofScheme<'a>>::PublicInputs,
-        _component_private_inputs: <PoRCircuit<U, H> as CircuitComponent>::ComponentPrivateInputs,
-        proof: &'b <PoR<H, U> as ProofScheme<'a>>::Proof,
-        public_params: &'b <PoR<H, U> as ProofScheme<'a>>::PublicParams,
+        public_inputs: &<PoR<Tree> as ProofScheme<'a>>::PublicInputs,
+        _component_private_inputs: <PoRCircuit<Tree> as CircuitComponent>::ComponentPrivateInputs,
+        proof: &'b <PoR<Tree> as ProofScheme<'a>>::Proof,
+        public_params: &'b <PoR<Tree> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
-    ) -> Result<PoRCircuit<'a, U, Bls12, H>> {
+    ) -> Result<PoRCircuit<Tree>> {
         let (root, private) = match (*public_inputs).commitment {
             None => (Root::Val(Some((*proof.proof.root()).into())), true),
             Some(commitment) => (Root::Val(Some(commitment.into())), false),
@@ -274,7 +274,7 @@ impl<'a, Tree: MerkleTreeTrait> PoRCircuit<Tree> {
     }
 }
 
-// #[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
 

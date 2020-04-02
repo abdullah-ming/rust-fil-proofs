@@ -68,11 +68,8 @@ where
         pub_params: &PublicParams<'a, S>,
         pub_in: &S::PublicInputs,
         priv_in: &S::PrivateInputs,
-        groth_params: &'b groth16::MappedParameters<E>,
-    ) -> Result<MultiProof<'b, E>>
-    where
-        E::Params: Sync,
-    {
+        groth_params: &'b groth16::MappedParameters<Bls12>,
+    ) -> Result<MultiProof<'b>> {
         let partition_count = Self::partition_count(pub_params);
 
         // This will always run at least once, since there cannot be zero partitions.
@@ -342,7 +339,7 @@ where
         public_parameters: &PublicParams<'a, S>,
         public_inputs: &S::PublicInputs,
         private_inputs: &S::PrivateInputs,
-    ) -> Result<Vec<(C, Vec<E::Fr>)>> {
+    ) -> Result<Vec<(C, Vec<Fr>)>> {
         let vanilla_params = &public_parameters.vanilla_params;
         let partition_count = partitions::partition_count(public_parameters.partitions);
         let vanilla_proofs = S::prove_all_partitions(
