@@ -325,14 +325,16 @@ impl<
     }
 
     pub fn new<I: IntoIterator<Item = H::Domain>>(data: I) -> Result<Self> {
-        todo!()
+        let tree = merkle::MerkleTree::new(data)?;
+        Ok(Self::from_merkle(tree))
     }
 
     pub fn new_with_config<I: IntoIterator<Item = H::Domain>>(
         data: I,
         config: StoreConfig,
     ) -> Result<Self> {
-        todo!()
+        let tree = merkle::MerkleTree::new_with_config(data, config)?;
+        Ok(Self::from_merkle(tree))
     }
 
     pub fn from_data<O: Hashable<H::Function>, I: IntoIterator<Item = O>>(data: I) -> Result<Self> {
@@ -344,15 +346,18 @@ impl<
         data: I,
         config: StoreConfig,
     ) -> Result<Self> {
-        todo!()
+        let tree = merkle::MerkleTree::from_data_with_config(data, config)?;
+        Ok(Self::from_merkle(tree))
     }
 
     pub fn from_data_store(data: S, leafs: usize) -> Result<Self> {
-        todo!()
+        let tree = merkle::MerkleTree::from_data_store(data, leafs)?;
+        Ok(Self::from_merkle(tree))
     }
 
     pub fn from_tree_slice(data: &[u8], leafs: usize) -> Result<Self> {
-        todo!()
+        let tree = merkle::MerkleTree::from_tree_slice(data, leafs)?;
+        Ok(Self::from_merkle(tree))
     }
 
     pub fn from_tree_slice_with_config(
@@ -360,25 +365,36 @@ impl<
         leafs: usize,
         config: StoreConfig,
     ) -> Result<Self> {
-        todo!()
+        let tree = merkle::MerkleTree::from_tree_slice_with_config(data, leafs, config)?;
+        Ok(Self::from_merkle(tree))
     }
 
     pub fn from_trees(trees: Vec<MerkleTreeWrapper<H, S, U, U0, U0>>) -> Result<Self> {
-        todo!()
+        let trees = trees.into_iter().map(|t| t.inner).collect();
+        let tree = merkle::MerkleTree::from_trees(trees)?;
+        Ok(Self::from_merkle(tree))
     }
 
     pub fn from_sub_trees(trees: Vec<MerkleTreeWrapper<H, S, U, V, U0>>) -> Result<Self> {
-        todo!()
+        let trees = trees.into_iter().map(|t| t.inner).collect();
+        let tree = merkle::MerkleTree::from_sub_trees(trees)?;
+        Ok(Self::from_merkle(tree))
     }
 
-    pub fn from_sub_trees_as_trees(
-        mut trees: Vec<MerkleTreeWrapper<H, S, U, U0, U0>>,
-    ) -> Result<Self> {
-        todo!()
+    pub fn from_sub_trees_as_trees(trees: Vec<MerkleTreeWrapper<H, S, U, U0, U0>>) -> Result<Self> {
+        let trees = trees.into_iter().map(|t| t.inner).collect();
+        let tree = merkle::MerkleTree::from_sub_trees_as_trees(trees)?;
+        Ok(Self::from_merkle(tree))
     }
 
-    pub fn from_slices(tree_data: &[&[u8]], leafs: usize) -> Result<Self> {
-        todo!()
+    pub fn from_slices(
+        tree_data: &[&[u8]],
+        leafs: usize,
+    ) -> Result<MerkleTreeWrapper<H, S, U, V, U0>> {
+        let tree = merkle::MerkleTree::<
+                <H as Hasher>::Domain, <H as Hasher>::Function, S, U, V, U0
+        >::from_slices(tree_data, leafs)?;
+        Ok(MerkleTreeWrapper::from_merkle(tree))
     }
 
     pub fn from_slices_with_configs(
@@ -386,46 +402,59 @@ impl<
         leafs: usize,
         configs: &[StoreConfig],
     ) -> Result<Self> {
-        todo!()
+        let tree = merkle::MerkleTree::from_slices_with_configs(tree_data, leafs, configs)?;
+        Ok(Self::from_merkle(tree))
     }
 
     pub fn from_stores(leafs: usize, stores: Vec<S>) -> Result<Self> {
-        todo!()
+        let tree = merkle::MerkleTree::from_stores(leafs, stores)?;
+        Ok(Self::from_merkle(tree))
     }
 
     pub fn from_store_configs(leafs: usize, configs: &[StoreConfig]) -> Result<Self> {
-        todo!()
+        let tree = merkle::MerkleTree::from_store_configs(leafs, configs)?;
+        Ok(Self::from_merkle(tree))
     }
 
     pub fn from_store_configs_and_replicas(
         leafs: usize,
         configs: &[StoreConfig],
         replica_paths: &[PathBuf],
-    ) -> Result<Self> {
-        todo!()
+    ) -> Result<LCTree<H, U, V, W>> {
+        let tree =
+            merkle::MerkleTree::from_store_configs_and_replicas(leafs, configs, replica_paths)?;
+        Ok(LCTree::from_merkle(tree))
     }
 
     pub fn from_sub_tree_store_configs(leafs: usize, configs: &[StoreConfig]) -> Result<Self> {
-        todo!()
+        let tree = merkle::MerkleTree::from_sub_tree_store_configs(leafs, configs)?;
+        Ok(Self::from_merkle(tree))
     }
 
     pub fn try_from_iter<I: IntoIterator<Item = Result<H::Domain>>>(into: I) -> Result<Self> {
-        todo!()
+        let tree = merkle::MerkleTree::try_from_iter(into)?;
+        Ok(Self::from_merkle(tree))
     }
 
     pub fn from_sub_tree_store_configs_and_replicas(
         leafs: usize,
         configs: &[StoreConfig],
         replica_paths: &[PathBuf],
-    ) -> Result<Self> {
-        todo!()
+    ) -> Result<LCTree<H, U, V, W>> {
+        let tree = merkle::MerkleTree::from_sub_tree_store_configs_and_replicas(
+            leafs,
+            configs,
+            replica_paths,
+        )?;
+        Ok(LCTree::from_merkle(tree))
     }
 
     pub fn try_from_iter_with_config<I: IntoIterator<Item = Result<H::Domain>>>(
         into: I,
         config: StoreConfig,
     ) -> Result<Self> {
-        todo!()
+        let tree = merkle::MerkleTree::try_from_iter_with_config(into, config)?;
+        Ok(Self::from_merkle(tree))
     }
 
     pub fn from_par_iter<I>(par_iter: I) -> Result<Self>
@@ -433,7 +462,8 @@ impl<
         I: IntoParallelIterator<Item = H::Domain>,
         I::Iter: IndexedParallelIterator,
     {
-        todo!()
+        let tree = merkle::MerkleTree::from_par_iter(par_iter)?;
+        Ok(Self::from_merkle(tree))
     }
 
     pub fn from_par_iter_with_config<I>(par_iter: I, config: StoreConfig) -> Result<Self>
@@ -441,7 +471,8 @@ impl<
         I: IntoParallelIterator<Item = H::Domain>,
         I::Iter: IndexedParallelIterator,
     {
-        todo!()
+        let tree = merkle::MerkleTree::from_par_iter_with_config(par_iter, config)?;
+        Ok(Self::from_merkle(tree))
     }
 }
 
@@ -840,11 +871,11 @@ impl<
         let leaf = Default::default();
         let path_elem = PathElement {
             hashes: vec![Default::default()],
-            index: 0
+            index: 0,
         };
         let path = vec![path_elem; n];
         MerkleProof {
-            data: ProofData::Single(SingleProof::new(root, leaf, path))
+            data: ProofData::Single(SingleProof::new(root, leaf, path)),
         }
     }
 }
