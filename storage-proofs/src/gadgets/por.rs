@@ -190,11 +190,17 @@ impl<'a, Tree: MerkleTreeTrait> Circuit<Bls12> for PoRCircuit<Tree> {
             for (i, (elements, indexes)) in auth_path.into_iter().enumerate() {
                 let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
 
-                let index_bit_count = match elements.len() {
-                    base_arity => log_base_arity,
-                    sub_arity => log_sub_arity,
-                    top_arity => log_top_arity,
-                    _ => panic!("wrong number of elements in inclusion proof path step"),
+                let index_bit_count = if elements.len() == base_arity {
+                    log_base_arity
+                } else if elements.len() == sub_arity {
+                    log_sub_arity
+                } else if elements.len() == top_arity {
+                    log_top_arity
+                } else {
+                    panic!(
+                        "wrong number of elements in inclusion proof path step: {}",
+                        elements.len()
+                    )
                 };
 
                 let mut index_bits = Vec::with_capacity(index_bit_count);
