@@ -77,7 +77,7 @@ pub struct PublicSector<T: Domain> {
 
 #[derive(Debug)]
 pub struct PrivateSector<'a, H: Hasher> {
-    pub tree: &'a OctLCMerkleTree<H::Domain, H::Function>,
+    pub tree: &'a OctLCMerkleTree<H>,
     pub comm_c: H::Domain,
     pub comm_r_last: H::Domain,
 }

@@ -70,7 +70,7 @@ pub struct PublicInputs<T: Domain> {
 
 #[derive(Debug)]
 pub struct PrivateInputs<H: Hasher> {
-    pub tree: OctLCMerkleTree<H::Domain, H::Function>,
+    pub tree: OctLCMerkleTree<H>,
     pub comm_c: H::Domain,
     pub comm_r_last: H::Domain,
 }
@@ -145,7 +145,7 @@ where
 pub fn generate_candidates<H: Hasher>(
     pub_params: &PublicParams,
     challenged_sectors: &[SectorId],
-    trees: &BTreeMap<SectorId, OctLCMerkleTree<H::Domain, H::Function>>,
+    trees: &BTreeMap<SectorId, OctLCMerkleTree<H>>,
     prover_id: H::Domain,
     randomness: H::Domain,
 ) -> Result<Vec<Candidate>> {
@@ -172,7 +172,7 @@ pub fn generate_candidates<H: Hasher>(
 
 fn generate_candidate<H: Hasher>(
     pub_params: &PublicParams,
-    tree: &OctLCMerkleTree<H::Domain, H::Function>,
+    tree: &OctLCMerkleTree<H>,
     prover_id: H::Domain,
     sector_id: SectorId,
     randomness: H::Domain,
@@ -492,7 +492,7 @@ mod tests {
             f.write_all(&data).unwrap();
 
             let cur_config = StoreConfig::from_config(&config, format!("test-lc-tree-{}", i), None);
-            let lctree: OctLCMerkleTree<_, _> = graph
+            let lctree: OctLCMerkleTree<_> = graph
                 .lcmerkle_tree(cur_config.clone(), &data, &replica_path)
                 .unwrap();
             trees.insert(i.into(), lctree);

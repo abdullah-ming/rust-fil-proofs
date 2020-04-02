@@ -18,13 +18,7 @@ use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::{
-    open_lcmerkle_tree, split_config, BinaryTree, MerkleProof, MerkleProofTrait, MerkleTree,
-    MerkleTreeTrait, OctLCSubTree, OctLCTopTree, OctLCTree, OctSubTree, OctTopTree, OctTree,
-    OctTreeData, SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_GIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
-    SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
-    SECTOR_SIZE_8_MIB,
-};
+use crate::merkle::*;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::data_at_node;
 
@@ -397,13 +391,12 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
             let tree_d_store: DiskStore<G::Domain> =
                 DiskStore::new_from_disk(tree_d_size, BINARY_ARITY, &t_aux.tree_d_config)
                     .context("tree_d")?;
-            let tree_d: BinaryTree<G> = BinaryTree::from_merkle(
-                MerkleTree::from_data_store(
-                    tree_d_store,
-                    get_merkle_tree_leafs(tree_d_size, BINARY_ARITY),
-                )
-                .context("tree_d")?,
-            );
+            let tree_d = BinaryMerkleTree::<G>::from_data_store(
+                tree_d_store,
+                get_merkle_tree_leafs(tree_d_size, BINARY_ARITY),
+            )
+            .context("tree_d")?;
+
             tree_d.delete(t_aux.tree_d_config).context("tree_d")?;
             trace!("tree d deleted");
         }
@@ -416,7 +409,7 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
             let tree_c_store: DiskStore<H::Domain> =
                 DiskStore::new_from_disk(tree_c_size, OCT_ARITY, &t_aux.tree_c_config)
                     .context("tree_c")?;
-            let tree_c: OctTree<H> = MerkleTree::from_data_store(
+            let tree_c: OctMerkleTree<H> = MerkleTree::from_data_store(
                 tree_c_store,
                 get_merkle_tree_leafs(tree_c_size, OCT_ARITY),
             )
@@ -442,7 +435,7 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
 pub struct TemporaryAuxCache<H: Hasher, G: Hasher> {
     /// The encoded nodes for 1..layers.
     pub labels: LabelsCache<H>,
-    pub tree_d: BinaryTree<G>,
+    pub tree_d: BinaryMerkleTree<G>,
 
     // Notably this is a LevelCacheTree instead of a full merkle.
     pub tree_r_last: OctTreeData<H>,
@@ -467,13 +460,11 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
         let tree_d_store: DiskStore<G::Domain> =
             DiskStore::new_from_disk(tree_d_size, BINARY_ARITY, &t_aux.tree_d_config)
                 .context("tree_d_store")?;
-        let tree_d: BinaryTree<G> = BinaryTree::from_merkle(
-            MerkleTree::from_data_store(
-                tree_d_store,
-                get_merkle_tree_leafs(tree_d_size, BINARY_ARITY),
-            )
-            .context("tree_d")?,
-        );
+        let tree_d = BinaryMerkleTree::<G>::from_data_store(
+            tree_d_store,
+            get_merkle_tree_leafs(tree_d_size, BINARY_ARITY),
+        )
+        .context("tree_d")?;
 
         let sector_size =
             get_merkle_tree_leafs(tree_d_size, BINARY_ARITY) * std::mem::size_of::<G::Domain>();
@@ -489,7 +480,7 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
                 let tree_c_store: DiskStore<H::Domain> =
                     DiskStore::new_from_disk(tree_c_size, OCT_ARITY, &t_aux.tree_c_config)
                         .context("tree_c_store")?;
-                let tree_c: OctTree<H> = MerkleTree::from_data_store(
+                let tree_c: OctMerkleTree<H> = MerkleTree::from_data_store(
                     tree_c_store,
                     get_merkle_tree_leafs(tree_c_size, OCT_ARITY),
                 )
@@ -502,7 +493,7 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
                     get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY)
                 );
 
-                let tree_r_last: OctLCTree<H> = open_lcmerkle_tree::<H, typenum::U8>(
+                let tree_r_last: OctLCMerkleTree<H> = open_lcmerkle_tree::<H, typenum::U8>(
                     t_aux.tree_r_last_config.clone(),
                     get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY),
                     &replica_path,
@@ -540,8 +531,7 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
 
                 let tree_c_size = t_aux.tree_c_config.size.unwrap();
                 let tree_c_leafs = get_merkle_tree_leafs(tree_c_size, OCT_ARITY);
-                let tree_c: OctSubTree<H> =
-                    merkletree::merkle::MerkleTree::from_store_configs(tree_c_leafs, &configs)?;
+                let tree_c = OctSubMerkleTree::<H>::from_store_configs(tree_c_leafs, &configs)?;
 
                 let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;
                 let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
@@ -569,7 +559,7 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
                     (configs, replica_paths)
                 };
 
-                let tree_r_last = OctLCSubTree::<H>::from_store_configs_and_replicas(
+                let tree_r_last = OctLCSubMerkleTree::<H>::from_store_configs_and_replicas(
                     tree_r_last_leafs,
                     &configs,
                     &replica_paths,
@@ -605,7 +595,8 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
 
                 let tree_c_size = t_aux.tree_c_config.size.unwrap();
                 let tree_c_leafs = get_merkle_tree_leafs(tree_c_size, OCT_ARITY);
-                let tree_c = OctTopTree::<H>::from_sub_tree_store_configs(tree_c_leafs, &configs)?;
+                let tree_c =
+                    OctTopMerkleTree::<H>::from_sub_tree_store_configs(tree_c_leafs, &configs)?;
 
                 let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;
                 let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
@@ -633,11 +624,12 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
                     (configs, replica_paths)
                 };
 
-                let tree_r_last = OctLCTopTree::<H>::from_sub_tree_store_configs_and_replicas(
-                    tree_r_last_leafs,
-                    &configs,
-                    &replica_paths,
-                )?;
+                let tree_r_last =
+                    OctLCTopMerkleTree::<H>::from_sub_tree_store_configs_and_replicas(
+                        tree_r_last_leafs,
+                        &configs,
+                        &replica_paths,
+                    )?;
 
                 Ok(TemporaryAuxCache {
                     labels: LabelsCache::new(&t_aux.labels).context("labels_cache")?,

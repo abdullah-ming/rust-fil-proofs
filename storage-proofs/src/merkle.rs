@@ -4,9 +4,10 @@ use std::marker::PhantomData;
 use std::path::PathBuf;
 
 use anyhow::{ensure, Result};
-use generic_array::typenum::{self, U0};
+use generic_array::typenum::{self, Unsigned, U0, U2, U4, U8};
 use log::trace;
 use merkletree::hash::Algorithm;
+use merkletree::hash::Hashable;
 use merkletree::merkle;
 use merkletree::merkle::{
     get_merkle_tree_leafs, get_merkle_tree_len, is_merkle_tree_size_valid,
@@ -19,12 +20,8 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::error::*;
-use crate::hasher::{Domain, Hasher};
+use crate::hasher::{Domain, Hasher, PoseidonArity};
 use crate::util::{data_at_node, NODE_SIZE};
-
-use generic_array::typenum::Unsigned;
-
-use crate::hasher::types::PoseidonArity;
 
 // FIXME: Move from filecoin-proofs/src/constants to here?
 pub const SECTOR_SIZE_2_KIB: u64 = 2_048;
@@ -46,47 +43,30 @@ pub use merkletree::store::{ExternalReader, Store};
 
 pub type DiskStore<E> = merkletree::store::DiskStore<E>;
 
-pub type MerkleTree<T, A, U> = merkle::MerkleTree<T, A, DiskStore<T>, U>;
-pub type LCMerkleTree<T, A, U> = merkle::MerkleTree<T, A, LevelCacheStore<T, std::fs::File>, U>;
-
-pub type BinaryMerkleTree<T, A> = MerkleTree<T, A, typenum::U2>;
-pub type BinaryLCMerkleTree<T, A> = LCMerkleTree<T, A, typenum::U2>;
-
-pub type BinarySubMerkleTree<T, A> = merkle::MerkleTree<T, A, DiskStore<T>, typenum::U2, typenum::U2>;
-
-pub type QuadMerkleTree<T, A> = MerkleTree<T, A, typenum::U4>;
-pub type QuadLCMerkleTree<T, A> = LCMerkleTree<T, A, typenum::U4>;
-
-pub type OctMerkleTree<T, A> = merkle::MerkleTree<T, A, DiskStore<T>, typenum::U8>;
-pub type OctSubMerkleTree<T, A> = merkle::MerkleTree<T, A, DiskStore<T>, typenum::U8, typenum::U2>;
-pub type OctTopMerkleTree<T, A> =
-    merkle::MerkleTree<T, A, DiskStore<T>, typenum::U8, typenum::U8, typenum::U2>;
-
-pub type OctLCMerkleTree<T, A> =
-    merkle::MerkleTree<T, A, LevelCacheStore<T, std::fs::File>, typenum::U8>;
-pub type OctLCSubMerkleTree<T, A> =
-    merkle::MerkleTree<T, A, LevelCacheStore<T, std::fs::File>, typenum::U8, typenum::U2>;
-pub type OctLCTopMerkleTree<T, A> = merkle::MerkleTree<
-    T,
-    A,
-    LevelCacheStore<T, std::fs::File>,
-    typenum::U8,
-    typenum::U8,
-    typenum::U2,
->;
-
 pub type MerkleStore<T> = DiskStore<T>;
 
-pub type BinaryTree<H> =
-    MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, typenum::U2, typenum::U0, typenum::U0>;
+type DiskTree<H, U, V, W> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U, V, W>;
+type LCTree<H, U, V, W> =
+    MerkleTreeWrapper<H, LevelCacheStore<<H as Hasher>::Domain, std::fs::File>, U, V, W>;
 
-pub type OctTree<H> = OctMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
-pub type OctSubTree<H> = OctSubMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
-pub type OctTopTree<H> = OctTopMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
+pub type MerkleTree<H, U> = DiskTree<H, U, U0, U0>;
+pub type LCMerkleTree<H, U> = LCTree<H, U, U0, U0>;
 
-pub type OctLCTree<H> = OctLCMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
-pub type OctLCSubTree<H> = OctLCSubMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
-pub type OctLCTopTree<H> = OctLCTopMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
+pub type BinaryMerkleTree<H> = MerkleTree<H, U2>;
+pub type BinaryLCMerkleTree<H> = LCMerkleTree<H, U2>;
+
+pub type BinarySubMerkleTree<H> = DiskTree<H, U2, U2, U0>;
+
+pub type QuadMerkleTree<H> = MerkleTree<H, U4>;
+pub type QuadLCMerkleTree<H> = LCMerkleTree<H, U4>;
+
+pub type OctMerkleTree<H> = DiskTree<H, U8, U0, U0>;
+pub type OctSubMerkleTree<H> = DiskTree<H, U8, U2, U0>;
+pub type OctTopMerkleTree<H> = DiskTree<H, U8, U8, U2>;
+
+pub type OctLCMerkleTree<H> = LCTree<H, U8, U0, U0>;
+pub type OctLCSubMerkleTree<H> = LCTree<H, U8, U2, U0>;
+pub type OctLCTopMerkleTree<H> = LCTree<H, U8, U8, U2>;
 
 pub trait MerkleTreeTrait: Send + Sync {
     type Arity: 'static + PoseidonArity;
@@ -104,6 +84,7 @@ pub trait MerkleTreeTrait: Send + Sync {
     fn display() -> String;
     fn root(&self) -> <Self::Hasher as Hasher>::Domain;
     fn gen_proof(&self, i: usize) -> Result<Self::Proof>;
+    fn gen_cached_proof(&self, i: usize, levels: usize) -> Result<Self::Proof>;
     fn from_merkle(
         tree: merkle::MerkleTree<
             <Self::Hasher as Hasher>::Domain,
@@ -202,6 +183,11 @@ impl<
 
     fn gen_proof(&self, i: usize) -> Result<Self::Proof> {
         let proof = self.inner.gen_proof(i)?;
+        MerkleProof::new_from_proof(&proof)
+    }
+
+    fn gen_cached_proof(&self, i: usize, levels: usize) -> Result<Self::Proof> {
+        let proof = self.inner.gen_cached_proof(i, levels)?;
         MerkleProof::new_from_proof(&proof)
     }
 
@@ -329,13 +315,133 @@ impl<
         W: PoseidonArity,
     > MerkleTreeWrapper<H, S, U, V, W>
 {
-    pub fn new(
+    pub fn from_merkle(
         tree: merkle::MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, S, U, V, W>,
     ) -> Self {
         Self {
             inner: tree,
             h: Default::default(),
         }
+    }
+
+    pub fn new<I: IntoIterator<Item = H::Domain>>(data: I) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn new_with_config<I: IntoIterator<Item = H::Domain>>(
+        data: I,
+        config: StoreConfig,
+    ) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn from_data<O: Hashable<H::Function>, I: IntoIterator<Item = O>>(data: I) -> Result<Self> {
+        let tree = merkle::MerkleTree::<<H as Hasher>::Domain, <H as Hasher>::Function, S, U, V, W>::from_data(data)?;
+        Ok(Self::from_merkle(tree))
+    }
+
+    pub fn from_data_with_config<O: Hashable<H::Function>, I: IntoIterator<Item = O>>(
+        data: I,
+        config: StoreConfig,
+    ) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn from_data_store(data: S, leafs: usize) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn from_tree_slice(data: &[u8], leafs: usize) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn from_tree_slice_with_config(
+        data: &[u8],
+        leafs: usize,
+        config: StoreConfig,
+    ) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn from_trees(trees: Vec<MerkleTreeWrapper<H, S, U, U0, U0>>) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn from_sub_trees(trees: Vec<MerkleTreeWrapper<H, S, U, V, U0>>) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn from_sub_trees_as_trees(
+        mut trees: Vec<MerkleTreeWrapper<H, S, U, U0, U0>>,
+    ) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn from_slices(tree_data: &[&[u8]], leafs: usize) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn from_slices_with_configs(
+        tree_data: &[&[u8]],
+        leafs: usize,
+        configs: &[StoreConfig],
+    ) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn from_stores(leafs: usize, stores: Vec<S>) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn from_store_configs(leafs: usize, configs: &[StoreConfig]) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn from_store_configs_and_replicas(
+        leafs: usize,
+        configs: &[StoreConfig],
+        replica_paths: &[PathBuf],
+    ) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn from_sub_tree_store_configs(leafs: usize, configs: &[StoreConfig]) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn try_from_iter<I: IntoIterator<Item = Result<H::Domain>>>(into: I) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn from_sub_tree_store_configs_and_replicas(
+        leafs: usize,
+        configs: &[StoreConfig],
+        replica_paths: &[PathBuf],
+    ) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn try_from_iter_with_config<I: IntoIterator<Item = Result<H::Domain>>>(
+        into: I,
+        config: StoreConfig,
+    ) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn from_par_iter<I>(par_iter: I) -> Result<Self>
+    where
+        I: IntoParallelIterator<Item = H::Domain>,
+        I::Iter: IndexedParallelIterator,
+    {
+        todo!()
+    }
+
+    pub fn from_par_iter_with_config<I>(par_iter: I, config: StoreConfig) -> Result<Self>
+    where
+        I: IntoParallelIterator<Item = H::Domain>,
+        I::Iter: IndexedParallelIterator,
+    {
+        todo!()
     }
 }
 
@@ -371,68 +477,142 @@ impl<
     }
 }
 
+impl<
+        H: Hasher,
+        S: Store<<H as Hasher>::Domain>,
+        BaseArity: PoseidonArity,
+        SubTreeArity: PoseidonArity,
+        TopTreeArity: PoseidonArity,
+    > std::ops::DerefMut for MerkleTreeWrapper<H, S, BaseArity, SubTreeArity, TopTreeArity>
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
 #[derive(Debug)]
 pub enum OctTreeData<H: Hasher> {
     /// A BaseTree contains a single Store.
-    Oct(OctTree<H>),
+    Oct(OctMerkleTree<H>),
 
     /// A SubTree contains a list of BaseTrees.
-    OctSub(OctSubTree<H>),
+    OctSub(OctSubMerkleTree<H>),
 
     /// A TopTree contains a list of SubTrees.
-    OctTop(OctTopTree<H>),
+    OctTop(OctTopMerkleTree<H>),
 
     /// A BaseTree contains a single Store.
-    OctLC(OctLCTree<H>),
+    OctLC(OctLCMerkleTree<H>),
 
     /// A SubTree contains a list of BaseTrees.
-    OctLCSub(OctLCSubTree<H>),
+    OctLCSub(OctLCSubMerkleTree<H>),
 
     /// A TopTree contains a list of SubTrees.
-    OctLCTop(OctLCTopTree<H>),
+    OctLCTop(OctLCTopMerkleTree<H>),
 }
 
 impl<H: Hasher> OctTreeData<H> {
-    pub fn octtree(&self) -> Option<&OctTree<H>> {
+    pub fn octtree(&self) -> Option<&OctMerkleTree<H>> {
         match self {
             OctTreeData::Oct(s) => Some(s),
             _ => None,
         }
     }
 
-    pub fn octsubtree(&self) -> Option<&OctSubTree<H>> {
+    pub fn octsubtree(&self) -> Option<&OctSubMerkleTree<H>> {
         match self {
             OctTreeData::OctSub(s) => Some(s),
             _ => None,
         }
     }
 
-    pub fn octtoptree(&self) -> Option<&OctTopTree<H>> {
+    pub fn octtoptree(&self) -> Option<&OctTopMerkleTree<H>> {
         match self {
             OctTreeData::OctTop(s) => Some(s),
             _ => None,
         }
     }
 
-    pub fn octlctree(&self) -> Option<&OctLCTree<H>> {
+    pub fn octlctree(&self) -> Option<&OctLCMerkleTree<H>> {
         match self {
             OctTreeData::OctLC(s) => Some(s),
             _ => None,
         }
     }
 
-    pub fn octlcsubtree(&self) -> Option<&OctLCSubTree<H>> {
+    pub fn octlcsubtree(&self) -> Option<&OctLCSubMerkleTree<H>> {
         match self {
             OctTreeData::OctLCSub(s) => Some(s),
             _ => None,
         }
     }
 
-    pub fn octlctoptree(&self) -> Option<&OctLCTopTree<H>> {
+    pub fn octlctoptree(&self) -> Option<&OctLCTopMerkleTree<H>> {
         match self {
             OctTreeData::OctLCTop(s) => Some(s),
             _ => None,
         }
+    }
+
+    pub fn gen_proof(&self, challenge: usize) -> Result<MerkleProof<H, typenum::U8>> {
+        // TODO: make this properly generic over a tree
+        todo!()
+        // match sector_size {
+        //     SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB => {
+        //         assert!(t_aux.tree_r_last.octlctree().is_some());
+        //         let tree_r_last = t_aux.tree_r_last.octlctree().unwrap();
+        //         let tree_r_last_proof = if t_aux.tree_r_last_config_levels == 0 {
+        //             tree_r_last.gen_proof(challenge)
+        //         } else {
+        //             tree_r_last.gen_cached_proof(challenge, t_aux.tree_r_last_config_levels)
+        //         }?;
+
+        //         let comm_r_last_proof = tree_r_last_proof;
+        //         assert!(comm_r_last_proof.validate(challenge));
+
+        //         comm_r_last_proof
+        //     }
+        //     SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB | SECTOR_SIZE_32_GIB => {
+        //         let sub_tree_count = 2;
+        //         let base_tree_leafs = base_tree_leafs / sub_tree_count;
+
+        //         assert!(t_aux.tree_r_last.octlcsubtree().is_some());
+        //         let tree_r_last = t_aux.tree_r_last.octlcsubtree().unwrap();
+        //         let tree_r_last_proof = if t_aux.tree_r_last_config_levels == 0 {
+        //             tree_r_last.gen_proof(challenge)
+        //         } else {
+        //             tree_r_last.gen_cached_proof(challenge, t_aux.tree_r_last_config_levels)
+        //         }?;
+
+        //         assert!(tree_r_last_proof.verify());
+
+        //         let comm_r_last_proof = tree_r_last_proof;
+        //         assert!(comm_r_last_proof.validate(challenge));
+
+        //         comm_r_last_proof
+        //     }
+        //     SECTOR_SIZE_32_KIB | SECTOR_SIZE_64_GIB => {
+        //         let top_tree_count = 2;
+        //         let sub_tree_count = 8;
+        //         let base_tree_leafs = base_tree_leafs / (top_tree_count * sub_tree_count);
+
+        //         assert!(t_aux.tree_r_last.octlctoptree().is_some());
+        //         let tree_r_last = t_aux.tree_r_last.octlctoptree().unwrap();
+        //         let tree_r_last_proof = if t_aux.tree_r_last_config_levels == 0 {
+        //             tree_r_last.gen_proof(challenge)
+        //         } else {
+        //             tree_r_last.gen_cached_proof(challenge, t_aux.tree_r_last_config_levels)
+        //         }?;
+
+        //         assert!(tree_r_last_proof.verify());
+        //         let comm_r_last_proof = tree_r_last_proof;
+
+        //         assert!(comm_r_last_proof.validate(challenge));
+
+        //         comm_r_last_proof
+        //     }
+        //     _ => panic!("Unsupported sector size"),
+        // }
     }
 }
 
@@ -840,7 +1020,6 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
         self.sub_proof.root()
     }
 
-
     fn len(&self) -> usize {
         Self::SubTreeArity::to_usize()
     }
@@ -850,8 +1029,8 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
     }
 
     fn proves_challenge(&self, challenge: usize) -> bool {
-        let sub_path_index = ((challenge / Self::Arity::to_usize()) * Self::Arity::to_usize()) +
-            (challenge % Self::Arity::to_usize());
+        let sub_path_index = ((challenge / Self::Arity::to_usize()) * Self::Arity::to_usize())
+            + (challenge % Self::Arity::to_usize());
 
         sub_path_index == challenge
     }
@@ -956,8 +1135,8 @@ impl<
     }
 
     fn proves_challenge(&self, challenge: usize) -> bool {
-        let sub_path_index = ((challenge / Self::Arity::to_usize()) * Self::Arity::to_usize()) +
-            (challenge % Self::Arity::to_usize());
+        let sub_path_index = ((challenge / Self::Arity::to_usize()) * Self::Arity::to_usize())
+            + (challenge % Self::Arity::to_usize());
 
         sub_path_index == challenge
     }
@@ -1071,12 +1250,12 @@ pub fn create_merkle_tree<Tree: MerkleTreeTrait>(
 /// replica path (since the replica file will contain the same data),
 /// we pass both since we have access from all callers and this avoids
 /// reading that data from the replica_path here.
-pub fn create_lcmerkle_tree<H: Hasher, BaseTreeArity: typenum::Unsigned>(
+pub fn create_lcmerkle_tree<H: Hasher, BaseTreeArity: 'static + PoseidonArity>(
     config: StoreConfig,
     size: usize,
     data: &[u8],
     replica_path: &PathBuf,
-) -> Result<LCMerkleTree<H::Domain, H::Function, BaseTreeArity>> {
+) -> Result<LCMerkleTree<H, BaseTreeArity>> {
     trace!("create_lcmerkle_tree called with size {}", size);
     trace!(
         "is_merkle_tree_size_valid({}, arity {}) = {}",
@@ -1098,11 +1277,8 @@ pub fn create_lcmerkle_tree<H: Hasher, BaseTreeArity: typenum::Unsigned>(
         H::Domain::try_from_bytes(d)
     };
 
-    let mut lc_tree: LCMerkleTree<H::Domain, H::Function, BaseTreeArity> =
-        LCMerkleTree::<H::Domain, H::Function, BaseTreeArity>::try_from_iter_with_config(
-            (0..size).map(f),
-            config,
-        )?;
+    let mut lc_tree: LCMerkleTree<H, BaseTreeArity> =
+        LCMerkleTree::<H, BaseTreeArity>::try_from_iter_with_config((0..size).map(f), config)?;
 
     lc_tree.set_external_reader_path(replica_path)?;
 
@@ -1111,11 +1287,11 @@ pub fn create_lcmerkle_tree<H: Hasher, BaseTreeArity: typenum::Unsigned>(
 
 /// Open an existing level cache merkle tree, given the specified
 /// config and replica_path.
-pub fn open_lcmerkle_tree<H: Hasher, BaseTreeArity: typenum::Unsigned>(
+pub fn open_lcmerkle_tree<H: Hasher, BaseTreeArity: 'static + PoseidonArity>(
     config: StoreConfig,
     size: usize,
     replica_path: &PathBuf,
-) -> Result<LCMerkleTree<H::Domain, H::Function, BaseTreeArity>> {
+) -> Result<LCMerkleTree<H, BaseTreeArity>> {
     trace!("open_lcmerkle_tree called with size {}", size);
     trace!(
         "is_merkle_tree_size_valid({}, arity {}) = {}",
@@ -1187,7 +1363,11 @@ mod tests {
         }
     }
 
-    fn merklepath_sub<H: Hasher, BaseTreeArity: 'static + PoseidonArity, SubTreeArity: 'static + PoseidonArity>() {
+    fn merklepath_sub<
+        H: Hasher,
+        BaseTreeArity: 'static + PoseidonArity,
+        SubTreeArity: 'static + PoseidonArity,
+    >() {
         let leafs = 64;
         let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed()).unwrap();
         let mut rng = rand::thread_rng();
@@ -1204,11 +1384,20 @@ mod tests {
             trees.push(merkletree::merkle::MerkleTree::<H::Domain, H::Function, DiskStore<_>, BaseTreeArity>::from_data(&data).expect("failed to build tree"));
         }
 
-        let tree = merkletree::merkle::MerkleTree::<H::Domain, H::Function, DiskStore<_>, BaseTreeArity, SubTreeArity>::from_trees(trees)
-            .expect("Failed to build 2 layer tree");
+        let tree = merkletree::merkle::MerkleTree::<
+            H::Domain,
+            H::Function,
+            DiskStore<_>,
+            BaseTreeArity,
+            SubTreeArity,
+        >::from_trees(trees)
+        .expect("Failed to build 2 layer tree");
 
         for i in 0..(leafs * SubTreeArity::to_usize()) {
-            let proof = SubProof::<H, BaseTreeArity, SubTreeArity>::new_from_proof(&tree.gen_proof(i).unwrap()).expect("failed to build sub-proof");
+            let proof = SubProof::<H, BaseTreeArity, SubTreeArity>::new_from_proof(
+                &tree.gen_proof(i).unwrap(),
+            )
+            .expect("failed to build sub-proof");
 
             assert!(proof.verify(), "failed to validate");
 
@@ -1221,7 +1410,12 @@ mod tests {
         }
     }
 
-    fn merklepath_top<H: Hasher, BaseTreeArity: 'static + PoseidonArity, SubTreeArity: 'static + PoseidonArity, TopTreeArity: 'static + PoseidonArity>() {
+    fn merklepath_top<
+        H: Hasher,
+        BaseTreeArity: 'static + PoseidonArity,
+        SubTreeArity: 'static + PoseidonArity,
+        TopTreeArity: 'static + PoseidonArity,
+    >() {
         let leafs = 64;
         let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed()).unwrap();
         let mut rng = rand::thread_rng();
@@ -1237,18 +1431,44 @@ mod tests {
         for i in 0..TopTreeArity::to_usize() {
             let mut trees = Vec::with_capacity(SubTreeArity::to_usize());
             for i in 0..SubTreeArity::to_usize() {
-                trees.push(merkletree::merkle::MerkleTree::<H::Domain, H::Function, DiskStore<_>, BaseTreeArity>::from_data(&data).expect("failed to build tree"));
+                trees.push(
+                    merkletree::merkle::MerkleTree::<
+                        H::Domain,
+                        H::Function,
+                        DiskStore<_>,
+                        BaseTreeArity,
+                    >::from_data(&data)
+                    .expect("failed to build tree"),
+                );
             }
 
-            sub_trees.push(merkletree::merkle::MerkleTree::<H::Domain, H::Function, DiskStore<_>, BaseTreeArity, SubTreeArity>::from_trees(trees)
-                           .expect("Failed to build 2 layer tree"));
+            sub_trees.push(
+                merkletree::merkle::MerkleTree::<
+                    H::Domain,
+                    H::Function,
+                    DiskStore<_>,
+                    BaseTreeArity,
+                    SubTreeArity,
+                >::from_trees(trees)
+                .expect("Failed to build 2 layer tree"),
+            );
         }
 
-        let tree = merkletree::merkle::MerkleTree::<H::Domain, H::Function, DiskStore<_>, BaseTreeArity, SubTreeArity, TopTreeArity>::from_sub_trees(sub_trees)
-            .expect("Failed to build 3 layer tree");
+        let tree = merkletree::merkle::MerkleTree::<
+            H::Domain,
+            H::Function,
+            DiskStore<_>,
+            BaseTreeArity,
+            SubTreeArity,
+            TopTreeArity,
+        >::from_sub_trees(sub_trees)
+        .expect("Failed to build 3 layer tree");
 
         for i in 0..(leafs * SubTreeArity::to_usize() * TopTreeArity::to_usize()) {
-            let proof = TopProof::<H, BaseTreeArity, SubTreeArity, TopTreeArity>::new_from_proof(&tree.gen_proof(i).unwrap()).expect("failed to build top-proof");
+            let proof = TopProof::<H, BaseTreeArity, SubTreeArity, TopTreeArity>::new_from_proof(
+                &tree.gen_proof(i).unwrap(),
+            )
+            .expect("failed to build top-proof");
 
             assert!(proof.verify(), "failed to validate");
 

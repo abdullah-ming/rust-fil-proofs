@@ -5,7 +5,6 @@ use paired::bls12_381::Bls12;
 use rand::RngCore;
 use serde::Serialize;
 use storage_proofs::crypto;
-use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::gadgets::pedersen::{pedersen_compression_num, pedersen_md_no_padding};
 use storage_proofs::gadgets::TestConstraintSystem;
 use storage_proofs::util::{bits_to_bytes, bytes_into_boolean_vec, bytes_into_boolean_vec_be};

@@ -11,7 +11,7 @@ use crate::error::Result;
 use crate::gadgets::por::PoRCompound;
 use crate::gadgets::variables::Root;
 use crate::hasher::Hasher;
-use crate::merkle::BinaryTree;
+use crate::merkle::BinaryMerkleTree;
 use crate::merkle::MerkleProofTrait;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por;
@@ -111,7 +111,7 @@ where
                     commitment: comm_r,
                     challenge: node as usize,
                 };
-                let por_inputs = PoRCompound::<BinaryTree<H>>::generate_public_inputs(
+                let por_inputs = PoRCompound::<BinaryMerkleTree<H>>::generate_public_inputs(
                     &por_pub_inputs,
                     &por_pub_params,
                     None,
@@ -125,7 +125,7 @@ where
                 challenge: *challenge,
             };
 
-            let por_inputs = PoRCompound::<BinaryTree<H>>::generate_public_inputs(
+            let por_inputs = PoRCompound::<BinaryMerkleTree<H>>::generate_public_inputs(
                 &por_pub_inputs,
                 &por_pub_params,
                 None,

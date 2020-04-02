@@ -250,7 +250,7 @@ mod tests {
             f.write_all(&data).unwrap();
 
             let cur_config = StoreConfig::from_config(&config, format!("test-lc-tree-{}", i), None);
-            let lctree: OctLCMerkleTree<_, _> = graph
+            let lctree: OctLCMerkleTree<_> = graph
                 .lcmerkle_tree(cur_config.clone(), &data, &replica_path)
                 .unwrap();
             trees.insert(i.into(), lctree);
