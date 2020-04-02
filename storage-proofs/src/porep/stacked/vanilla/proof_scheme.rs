@@ -12,18 +12,19 @@ use super::{
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::hasher::{HashFunction, Hasher};
+use crate::merkle::MerkleTreeTrait;
 use crate::proof::ProofScheme;
 
-impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for StackedDrg<'c, H, G> {
-    type PublicParams = PublicParams<H>;
+impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a> for StackedDrg<'c, Tree, G> {
+    type PublicParams = PublicParams<Tree::Hasher>;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>;
-    type PrivateInputs = PrivateInputs<H, G>;
-    type Proof = Vec<Proof<H, G>>;
+    type PublicInputs = PublicInputs<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>;
+    type PrivateInputs = PrivateInputs<Tree, G>;
+    type Proof = Vec<Proof<Tree::Hasher, G>>;
     type Requirements = ChallengeRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
-        let graph = StackedBucketGraph::<H>::new_stacked(
+        let graph = StackedBucketGraph::<Tree::Hasher>::new_stacked(
             sp.nodes,
             sp.degree,
             sp.expansion_degree,
@@ -99,10 +100,10 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
             );
 
             trace!("verify comm_r");
-            let actual_comm_r: H::Domain = {
+            let actual_comm_r: <Tree::Hasher as Hasher>::Domain = {
                 let comm_c = proofs[0].comm_c();
                 let comm_r_last = proofs[0].comm_r_last();
-                H::Function::hash2(comm_c, comm_r_last)
+                <Tree::Hasher as Hasher>::Function::hash2(comm_c, comm_r_last)
             };
 
             if expected_comm_r != &actual_comm_r {
@@ -144,7 +145,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
     }
 
     fn satisfies_requirements(
-        public_params: &PublicParams<H>,
+        public_params: &PublicParams<Tree::Hasher>,
         requirements: &ChallengeRequirements,
         partitions: usize,
     ) -> bool {
