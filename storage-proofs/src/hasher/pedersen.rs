@@ -430,8 +430,7 @@ mod tests {
     #[test]
     fn test_path() {
         let values = ["hello", "world", "you", "two"];
-        let t =
-            BinaryMerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter()).unwrap();
+        let t = BinaryMerkleTree::<PedersenHasher>::from_data(values.iter()).unwrap();
 
         let p = t.gen_proof(0).unwrap(); // create a proof for the first value = "hello"
         assert_eq!(*p.path(), vec![0, 0]);
@@ -446,8 +445,7 @@ mod tests {
     fn test_pedersen_hasher() {
         let values = ["hello", "world", "you", "two"];
 
-        let t =
-            BinaryMerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter()).unwrap();
+        let t = BinaryMerkleTree::<PedersenHasher>::from_data(values.iter()).unwrap();
 
         assert_eq!(t.leafs(), 4);
 

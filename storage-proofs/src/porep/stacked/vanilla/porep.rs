@@ -7,7 +7,7 @@ use super::{
 
 use crate::error::Result;
 use crate::hasher::Hasher;
-use crate::merkle::BinaryTree;
+use crate::merkle::BinaryMerkleTree;
 use crate::porep::PoRep;
 use crate::Data;
 
@@ -21,7 +21,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
         pp: &'a PublicParams<H>,
         replica_id: &H::Domain,
         data: Data<'a>,
-        data_tree: Option<BinaryTree<G>>,
+        data_tree: Option<BinaryMerkleTree<G>>,
         config: StoreConfig,
         replica_path: PathBuf,
     ) -> Result<(Self::Tau, Self::ProverAux)> {

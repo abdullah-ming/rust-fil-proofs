@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::drgraph::graph_height;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{BinaryTree, MerkleProof, MerkleProofTrait};
+use crate::merkle::{BinaryMerkleTree, MerkleProof, MerkleProofTrait};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
@@ -56,7 +56,7 @@ pub struct PublicInputs<'a, T: 'a + Domain> {
 
 #[derive(Debug, Clone)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub trees: &'a BTreeMap<SectorId, &'a BinaryTree<H>>,
+    pub trees: &'a BTreeMap<SectorId, &'a BinaryMerkleTree<H>>,
     pub comm_cs: &'a [H::Domain],
     pub comm_r_lasts: &'a [H::Domain],
 }
@@ -320,10 +320,10 @@ mod tests {
         let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let graph2 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree1 = graph1
-            .merkle_tree::<BinaryTree<H>>(None, data1.as_slice())
+            .merkle_tree::<BinaryMerkleTree<H>>(None, data1.as_slice())
             .unwrap();
         let tree2 = graph2
-            .merkle_tree::<BinaryTree<H>>(None, data2.as_slice())
+            .merkle_tree::<BinaryMerkleTree<H>>(None, data2.as_slice())
             .unwrap();
 
         let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
@@ -440,7 +440,7 @@ mod tests {
             .collect();
 
         let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree: BinaryTree<H> = graph.merkle_tree(None, data.as_slice()).unwrap();
+        let tree: BinaryMerkleTree<H> = graph.merkle_tree(None, data.as_slice()).unwrap();
         let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
 
         let faults = OrderedSectorSet::new();
@@ -519,7 +519,7 @@ mod tests {
 
         let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree = graph
-            .merkle_tree::<BinaryTree<H>>(None, data.as_slice())
+            .merkle_tree::<BinaryMerkleTree<H>>(None, data.as_slice())
             .unwrap();
         let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
         let mut faults = OrderedSectorSet::new();

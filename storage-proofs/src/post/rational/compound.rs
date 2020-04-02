@@ -185,7 +185,7 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::gadgets::TestConstraintSystem;
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
-    use crate::merkle::BinaryTree;
+    use crate::merkle::BinaryMerkleTree;
     use crate::post::rational::{self, derive_challenges};
     use crate::proof::NoRequirements;
     use crate::sector::OrderedSectorSet;
@@ -229,12 +229,12 @@ mod tests {
 
         let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree1 = graph1
-            .merkle_tree::<BinaryTree<H>>(None, data1.as_slice())
+            .merkle_tree::<BinaryMerkleTree<H>>(None, data1.as_slice())
             .unwrap();
 
         let graph2 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree2 = graph2
-            .merkle_tree::<BinaryTree<H>>(None, data2.as_slice())
+            .merkle_tree::<BinaryMerkleTree<H>>(None, data2.as_slice())
             .unwrap();
 
         let faults = OrderedSectorSet::new();

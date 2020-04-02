@@ -33,13 +33,7 @@ use crate::measurements::{
     measure_op,
     Operation::{CommD, EncodeWindowTimeAll},
 };
-use crate::merkle::{
-    split_config, BinaryTree, MerkleProof, MerkleProofTrait, MerkleTree, MerkleTreeTrait,
-    OctLCSubTree, OctLCTopTree, OctLCTree, OctSubTree, OctTopTree, OctTree, Store,
-    SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_GIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
-    SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
-    SECTOR_SIZE_8_MIB,
-};
+use crate::merkle::*;
 use crate::porep::PoRep;
 use crate::util::NODE_SIZE;
 pub const TOTAL_PARENTS: usize = 37;
@@ -163,26 +157,21 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                                     // All labels in C_X
                                     trace!("  c_x");
-                                    let c_x = t_aux
-                                        .column(challenge as u32)?
-                                        .into_proof_sub(tree_c)?;
+                                    let c_x =
+                                        t_aux.column(challenge as u32)?.into_proof_sub(tree_c)?;
 
                                     // All labels in the DRG parents.
                                     trace!("  drg_parents");
                                     let drg_parents = get_drg_parents_columns(challenge)?
                                         .into_iter()
-                                        .map(|column| {
-                                            column.into_proof_sub(tree_c)
-                                        })
+                                        .map(|column| column.into_proof_sub(tree_c))
                                         .collect::<Result<_>>()?;
 
                                     // Labels for the expander parents
                                     trace!("  exp_parents");
                                     let exp_parents = get_exp_parents_columns(challenge)?
                                         .into_iter()
-                                        .map(|column| {
-                                            column.into_proof_sub(tree_c)
-                                        })
+                                        .map(|column| column.into_proof_sub(tree_c))
                                         .collect::<Result<_>>()?;
 
                                     (c_x, drg_parents, exp_parents)
@@ -202,26 +191,21 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                                     // All labels in C_X
                                     trace!("  c_x");
-                                    let c_x = t_aux
-                                        .column(challenge as u32)?
-                                        .into_proof_top(tree_c)?;
+                                    let c_x =
+                                        t_aux.column(challenge as u32)?.into_proof_top(tree_c)?;
 
                                     // All labels in the DRG parents.
                                     trace!("  drg_parents");
                                     let drg_parents = get_drg_parents_columns(challenge)?
                                         .into_iter()
-                                        .map(|column| {
-                                            column.into_proof_top(tree_c)
-                                        })
+                                        .map(|column| column.into_proof_top(tree_c))
                                         .collect::<Result<_>>()?;
 
                                     // Labels for the expander parents
                                     trace!("  exp_parents");
                                     let exp_parents = get_exp_parents_columns(challenge)?
                                         .into_iter()
-                                        .map(|column| {
-                                            column.into_proof_top(tree_c)
-                                        })
+                                        .map(|column| column.into_proof_top(tree_c))
                                         .collect::<Result<_>>()?;
 
                                     (c_x, drg_parents, exp_parents)
@@ -238,80 +222,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                         // Final replica layer openings
                         trace!("final replica layer openings");
-                        let comm_r_last_proof = match sector_size {
-                            SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB => {
-                                assert!(t_aux.tree_r_last.octlctree().is_some());
-                                let tree_r_last = t_aux.tree_r_last.octlctree().unwrap();
-                                let tree_r_last_proof = if t_aux.tree_r_last_config_levels == 0 {
-                                    tree_r_last.gen_proof(challenge)
-                                } else {
-                                    tree_r_last.gen_cached_proof(
-                                        challenge,
-                                        t_aux.tree_r_last_config_levels,
-                                    )
-                                }?;
-
-                                let comm_r_last_proof =
-                                    MerkleProof::new_from_proof(&tree_r_last_proof)?;
-                                assert!(comm_r_last_proof.validate(challenge));
-
-                                comm_r_last_proof
-                            }
-                            SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB
-                            | SECTOR_SIZE_32_GIB => {
-                                let sub_tree_count = 2;
-                                let base_tree_leafs = base_tree_leafs / sub_tree_count;
-
-                                assert!(t_aux.tree_r_last.octlcsubtree().is_some());
-                                let tree_r_last = t_aux.tree_r_last.octlcsubtree().unwrap();
-                                let tree_r_last_proof = if t_aux.tree_r_last_config_levels == 0 {
-                                    tree_r_last.gen_proof(challenge)
-                                } else {
-                                    tree_r_last.gen_cached_proof(
-                                        challenge,
-                                        t_aux.tree_r_last_config_levels,
-                                    )
-                                }?;
-
-                                assert!(tree_r_last_proof.validate::<H::Function>()?);
-                                assert!(tree_r_last_proof.sub_tree_proof.is_some());
-
-                                let comm_r_last_proof =
-                                    MerkleProof::new_from_proof(&tree_r_last_proof)?;
-
-                                assert!(comm_r_last_proof.validate(challenge));
-
-                                comm_r_last_proof
-                            }
-                            SECTOR_SIZE_32_KIB | SECTOR_SIZE_64_GIB => {
-                                let top_tree_count = 2;
-                                let sub_tree_count = 8;
-                                let base_tree_leafs =
-                                    base_tree_leafs / (top_tree_count * sub_tree_count);
-
-                                assert!(t_aux.tree_r_last.octlctoptree().is_some());
-                                let tree_r_last = t_aux.tree_r_last.octlctoptree().unwrap();
-                                let tree_r_last_proof = if t_aux.tree_r_last_config_levels == 0 {
-                                    tree_r_last.gen_proof(challenge)
-                                } else {
-                                    tree_r_last.gen_cached_proof(
-                                        challenge,
-                                        t_aux.tree_r_last_config_levels,
-                                    )
-                                }?;
-
-                                assert!(tree_r_last_proof.validate::<H::Function>()?);
-                                assert!(tree_r_last_proof.sub_tree_proof.is_some());
-
-                                let comm_r_last_proof =
-                                    MerkleProof::new_from_proof(&tree_r_last_proof)?;
-
-                                assert!(comm_r_last_proof.validate(challenge));
-
-                                comm_r_last_proof
-                            }
-                            _ => panic!("Unsupported sector size"),
-                        };
+                        let comm_r_last_proof = t_aux.tree_r_last.gen_proof(challenge)?;
 
                         // Labeling Proofs Layer 1..l
                         let mut labeling_proofs = HashMap::with_capacity(layers);
@@ -500,7 +411,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     fn build_binary_tree<K: Hasher>(
         tree_data: &[u8],
         config: StoreConfig,
-    ) -> Result<BinaryTree<K>> {
+    ) -> Result<BinaryMerkleTree<K>> {
         trace!("building tree (size: {})", tree_data.len());
 
         let leafs = tree_data.len() / NODE_SIZE;
@@ -513,7 +424,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 .map(|i| get_node::<K>(tree_data, i).unwrap()),
             config,
         )?;
-        Ok(BinaryTree::from_merkle(tree))
+        Ok(tree)
     }
 
     pub(crate) fn transform_and_replicate_layers(
@@ -521,7 +432,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
         data: Data,
-        data_tree: Option<BinaryTree<G>>,
+        data_tree: Option<BinaryMerkleTree<G>>,
         config: StoreConfig,
         replica_path: PathBuf,
     ) -> Result<TransformedLayers<H, G>> {
@@ -607,7 +518,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         graph: &StackedBucketGraph<H>,
         layer_challenges: &LayerChallenges,
         mut data: Data,
-        data_tree: Option<BinaryTree<G>>,
+        data_tree: Option<BinaryMerkleTree<G>>,
         config: StoreConfig,
         replica_path: PathBuf,
         label_configs: Labels<H>,
@@ -711,7 +622,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                     info!("building tree_c");
                     assert!(configs[i].is_some());
-                    trees.push(OctTree::<H>::from_par_iter_with_config(
+                    trees.push(OctMerkleTree::<H>::from_par_iter_with_config(
                         hashes.into_par_iter(),
                         if tree_count == 1 {
                             tree_c_config.clone()
@@ -732,13 +643,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     tree_c_config.size = Some(trees[0].len());
 
                     // Build a top level tree consisting of sub_tree_count (i.e. 2) sub_trees, each of (tree_count / sub_tree_count) base layer trees.
-                    let tree_c = OctTopTree::<H>::from_sub_trees_as_trees(trees)?;
+                    let tree_c = OctTopMerkleTree::<H>::from_sub_trees_as_trees(trees)?;
 
                     Ok(tree_c.root())
                 } else {
                     assert!(tree_count == 2 || tree_count == 8 || tree_count == 16);
                     tree_c_config.size = Some(trees[0].len());
-                    let tree_c = OctSubTree::<H>::from_trees(trees)?;
+                    let tree_c = OctSubMerkleTree::<H>::from_trees(trees)?;
 
                     Ok(tree_c.root())
                 }
@@ -797,7 +708,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         });
 
                     assert!(config.is_some());
-                    trees.push(OctLCTree::<H>::from_par_iter_with_config(
+                    trees.push(OctLCMerkleTree::<H>::from_par_iter_with_config(
                         encoded_data,
                         if tree_count == 1 {
                             tree_r_last_config.clone()
@@ -844,11 +755,12 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     let replica_paths =
                         Self::write_replica_data(&data, tree_count, leafs, &replica_path)?;
 
-                    let tree_r_last = OctLCTopTree::<H>::from_sub_tree_store_configs_and_replicas(
-                        leafs,
-                        &unwrapped_configs,
-                        &replica_paths,
-                    )?;
+                    let tree_r_last =
+                        OctLCTopMerkleTree::<H>::from_sub_tree_store_configs_and_replicas(
+                            leafs,
+                            &unwrapped_configs,
+                            &replica_paths,
+                        )?;
 
                     Ok(tree_r_last.root())
                 } else {
@@ -870,7 +782,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     let replica_paths =
                         Self::write_replica_data(&data, tree_count, leafs, &replica_path)?;
 
-                    let tree_r_last = OctLCSubTree::<H>::from_store_configs_and_replicas(
+                    let tree_r_last = OctLCSubMerkleTree::<H>::from_store_configs_and_replicas(
                         leafs,
                         &unwrapped_configs,
                         &replica_paths,
@@ -957,7 +869,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         pp: &'a PublicParams<H>,
         labels: Labels<H>,
         data: Data<'a>,
-        data_tree: BinaryTree<G>,
+        data_tree: BinaryMerkleTree<G>,
         config: StoreConfig,
         replica_path: PathBuf,
     ) -> Result<(

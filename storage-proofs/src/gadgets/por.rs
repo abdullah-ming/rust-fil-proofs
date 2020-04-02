@@ -301,7 +301,7 @@ mod tests {
         Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonArity, PoseidonDomain,
         PoseidonHasher, Sha256Hasher,
     };
-    use crate::merkle::{BinaryTree, DiskStore, MerkleProofTrait, MerkleTreeWrapper};
+    use crate::merkle::{BinaryMerkleTree, DiskStore, MerkleProofTrait, MerkleTreeWrapper};
     use crate::por;
     use crate::proof::ProofScheme;
     use crate::util::data_at_node;
@@ -412,7 +412,7 @@ mod tests {
             .collect();
         let graph = BucketGraph::<PedersenHasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree = graph
-            .merkle_tree::<BinaryTree<PedersenHasher>>(None, data.as_slice())
+            .merkle_tree::<BinaryMerkleTree<PedersenHasher>>(None, data.as_slice())
             .unwrap();
 
         let public_inputs = por::PublicInputs {
@@ -428,23 +428,23 @@ mod tests {
             partitions: None,
             priority: false,
         };
-        let public_params =
-            PoRCompound::<BinaryTree<PedersenHasher>>::setup(&setup_params).expect("setup failed");
+        let public_params = PoRCompound::<BinaryMerkleTree<PedersenHasher>>::setup(&setup_params)
+            .expect("setup failed");
 
-        let private_inputs = por::PrivateInputs::<BinaryTree<PedersenHasher>>::new(
+        let private_inputs = por::PrivateInputs::<BinaryMerkleTree<PedersenHasher>>::new(
             bytes_into_fr(data_at_node(data.as_slice(), public_inputs.challenge).unwrap())
                 .expect("failed to create Fr from node data")
                 .into(),
             &tree,
         );
 
-        let gparams = PoRCompound::<BinaryTree<PedersenHasher>>::groth_params(
+        let gparams = PoRCompound::<BinaryMerkleTree<PedersenHasher>>::groth_params(
             Some(rng),
             &public_params.vanilla_params,
         )
         .expect("failed to generate groth params");
 
-        let proof = PoRCompound::<BinaryTree<PedersenHasher>>::prove(
+        let proof = PoRCompound::<BinaryMerkleTree<PedersenHasher>>::prove(
             &public_params,
             &public_inputs,
             &private_inputs,
@@ -452,7 +452,7 @@ mod tests {
         )
         .expect("failed while proving");
 
-        let verified = PoRCompound::<BinaryTree<PedersenHasher>>::verify(
+        let verified = PoRCompound::<BinaryMerkleTree<PedersenHasher>>::verify(
             &public_params,
             &public_inputs,
             &proof,
@@ -461,7 +461,7 @@ mod tests {
         .expect("failed while verifying");
         assert!(verified);
 
-        let (circuit, inputs) = PoRCompound::<BinaryTree<PedersenHasher>>::circuit_for_test(
+        let (circuit, inputs) = PoRCompound::<BinaryMerkleTree<PedersenHasher>>::circuit_for_test(
             &public_params,
             &public_inputs,
             &private_inputs,

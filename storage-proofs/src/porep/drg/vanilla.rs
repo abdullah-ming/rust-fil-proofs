@@ -16,7 +16,8 @@ use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, HashFunction, Hasher, PoseidonArity};
 use crate::merkle::{
-    BinaryLCMerkleTree, BinaryTree, LCMerkleTree, MerkleProof, MerkleProofTrait, MerkleTreeTrait,
+    BinaryLCMerkleTree, BinaryMerkleTree, LCMerkleTree, MerkleProof, MerkleProofTrait,
+    MerkleTreeTrait,
 };
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::PoRep;
@@ -38,12 +39,12 @@ impl<T: Domain> Tau<T> {
 
 #[derive(Debug)]
 pub struct ProverAux<H: Hasher> {
-    pub tree_d: BinaryTree<H>,
-    pub tree_r: BinaryLCMerkleTree<H::Domain, H::Function>,
+    pub tree_d: BinaryMerkleTree<H>,
+    pub tree_r: BinaryLCMerkleTree<H>,
 }
 
 impl<H: Hasher> ProverAux<H> {
-    pub fn new(tree_d: BinaryTree<H>, tree_r: BinaryLCMerkleTree<H::Domain, H::Function>) -> Self {
+    pub fn new(tree_d: BinaryMerkleTree<H>, tree_r: BinaryLCMerkleTree<H>) -> Self {
         ProverAux { tree_d, tree_r }
     }
 }
@@ -57,8 +58,8 @@ pub struct PublicInputs<T: Domain> {
 
 #[derive(Debug)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub tree_d: &'a BinaryTree<H>,
-    pub tree_r: &'a BinaryLCMerkleTree<H::Domain, H::Function>,
+    pub tree_d: &'a BinaryMerkleTree<H>,
+    pub tree_r: &'a BinaryLCMerkleTree<H>,
     pub tree_r_config_levels: usize,
 }
 
@@ -325,7 +326,7 @@ where
                 }
             }?;
             replica_nodes.push(DataProof {
-                proof: MerkleProof::new_from_proof(&tree_proof)?,
+                proof: tree_proof,
                 data,
             });
 
@@ -343,7 +344,7 @@ where
                         }
                     }?;
                     DataProof {
-                        proof: MerkleProof::new_from_proof(&proof)?,
+                        proof,
                         data: tree_r.read_at(*p as usize)?,
                     }
                 }));
@@ -481,7 +482,7 @@ where
         pp: &Self::PublicParams,
         replica_id: &H::Domain,
         mut data: Data<'a>,
-        data_tree: Option<BinaryTree<H>>,
+        data_tree: Option<BinaryMerkleTree<H>>,
         config: StoreConfig,
         replica_path: PathBuf,
     ) -> Result<(Tau<H::Domain>, ProverAux<H>)> {
@@ -493,7 +494,7 @@ where
             Some(tree) => tree,
             None => pp
                 .graph
-                .merkle_tree::<BinaryTree<H>>(Some(config.clone()), data.as_ref())?,
+                .merkle_tree::<BinaryMerkleTree<H>>(Some(config.clone()), data.as_ref())?,
         };
 
         let graph = &pp.graph;
@@ -526,7 +527,7 @@ where
 
         let tree_r_last_config =
             StoreConfig::from_config(&config, CacheKey::CommRLastTree.to_string(), None);
-        let tree_r: BinaryLCMerkleTree<_, _> =
+        let tree_r: BinaryLCMerkleTree<_> =
             pp.graph
                 .lcmerkle_tree(tree_r_last_config, &data.as_ref(), &replica_path)?;
 
@@ -602,7 +603,7 @@ where
 
 pub fn decode_domain_block<H>(
     replica_id: &H::Domain,
-    tree: &BinaryLCMerkleTree<H::Domain, H::Function>,
+    tree: &BinaryLCMerkleTree<H>,
     node: usize,
     node_data: <H as Hasher>::Domain,
     parents: &[u32],
@@ -618,11 +619,11 @@ where
 /// Creates the encoding key from a `MerkleTree`.
 /// The algorithm for that is `Blake2s(id | encodedParentNode1 | encodedParentNode1 | ...)`.
 /// It is only public so that it can be used for benchmarking
-pub fn create_key_from_tree<H: Hasher, U: typenum::Unsigned>(
+pub fn create_key_from_tree<H: Hasher, U: 'static + PoseidonArity>(
     id: &H::Domain,
     node: usize,
     parents: &[u32],
-    tree: &LCMerkleTree<H::Domain, H::Function, U>,
+    tree: &LCMerkleTree<H, U>,
 ) -> Result<H::Domain> {
     let mut hasher = Sha256::new();
     hasher.input(AsRef::<[u8]>::as_ref(&id));
