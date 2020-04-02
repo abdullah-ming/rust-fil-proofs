@@ -26,7 +26,7 @@ use storage_proofs::sector::SectorId;
 use crate::api::util::{as_safe_commitment, commitment_from_fr, get_tree_size};
 use crate::caches::{get_stacked_params, get_stacked_verifying_key};
 use crate::constants::{
-    DefaultPieceHasher, DefaultTreeHasher, POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN,
+    DefaultPieceHasher, DefaultTreeHasher, DefaultBinaryTree, DefaultOctTree, POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN,
 };
 use crate::parameters::setup_params;
 pub use crate::pieces;
@@ -96,8 +96,8 @@ where
     };
 
     let compound_public_params =
-        <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        <StackedCompound<DefaultBinaryTree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<DefaultBinaryTree, DefaultPieceHasher>,
             _,
         >>::setup(&compound_setup_params)?;
 
@@ -154,7 +154,7 @@ where
     let replica_id =
         generate_replica_id::<DefaultTreeHasher, _>(&prover_id, sector_id.into(), &ticket, comm_d);
 
-    let labels = StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::replicate_phase1(
+    let labels = StackedDrg::<DefaultBinaryTree, DefaultPieceHasher>::replicate_phase1(
         &compound_public_params.vanilla_params,
         &replica_id,
         config.clone(),
@@ -244,13 +244,13 @@ where
     };
 
     let compound_public_params =
-        <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        <StackedCompound<DefaultBinaryTree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<DefaultBinaryTree, DefaultPieceHasher>,
             _,
         >>::setup(&compound_setup_params)?;
 
     let (tau, (p_aux, t_aux)) =
-        StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::replicate_phase2(
+        StackedDrg::<DefaultBinaryTree, DefaultPieceHasher>::replicate_phase2(
             &compound_public_params.vanilla_params,
             labels,
             data,
@@ -326,7 +326,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>>(
 
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
-    let t_aux_cache: TemporaryAuxCache<DefaultTreeHasher, DefaultPieceHasher> =
+    let t_aux_cache: TemporaryAuxCache<DefaultBinaryTree, DefaultPieceHasher> =
         TemporaryAuxCache::new(&t_aux, replica_path.as_ref().to_path_buf())
             .context("failed to restore contents of t_aux")?;
 
@@ -350,7 +350,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>>(
         seed,
     };
 
-    let private_inputs = stacked::PrivateInputs::<DefaultTreeHasher, DefaultPieceHasher> {
+    let private_inputs = stacked::PrivateInputs::<DefaultBinaryTree, DefaultPieceHasher> {
         p_aux,
         t_aux: t_aux_cache,
     };
@@ -365,8 +365,8 @@ pub fn seal_commit_phase1<T: AsRef<Path>>(
     };
 
     let compound_public_params =
-        <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        <StackedCompound<DefaultBinaryTree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<DefaultBinaryTree, DefaultPieceHasher>,
             _,
         >>::setup(&compound_setup_params)?;
 
@@ -377,7 +377,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>>(
         StackedCompound::partition_count(&compound_public_params),
     )?;
 
-    let sanity_check = StackedDrg::verify_all_partitions(
+    let sanity_check = StackedDrg::<DefaultBinaryTree, _>::verify_all_partitions(
         &compound_public_params.vanilla_params,
         &public_inputs,
         &vanilla_proofs,
@@ -447,13 +447,13 @@ pub fn seal_commit_phase2(
     };
 
     let compound_public_params =
-        <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        <StackedCompound<DefaultBinaryTree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<DefaultBinaryTree, DefaultPieceHasher>,
             _,
         >>::setup(&compound_setup_params)?;
 
     info!("snark_proof:start");
-    let groth_proofs = StackedCompound::circuit_proofs(
+    let groth_proofs = StackedCompound::<DefaultBinaryTree, _>::circuit_proofs(
         &public_inputs,
         vanilla_proofs,
         &compound_public_params.vanilla_params,
@@ -543,7 +543,7 @@ pub fn verify_seal(
 
     let compound_public_params: compound_proof::PublicParams<
         '_,
-        StackedDrg<'_, DefaultTreeHasher, DefaultPieceHasher>,
+        StackedDrg<'_, DefaultBinaryTree, DefaultPieceHasher>,
     > = StackedCompound::setup(&compound_setup_params)?;
 
     let public_inputs = stacked::PublicInputs::<
@@ -649,7 +649,7 @@ pub fn verify_batch_seal(
 
     let compound_public_params: compound_proof::PublicParams<
         '_,
-        StackedDrg<'_, DefaultTreeHasher, DefaultPieceHasher>,
+        StackedDrg<'_, DefaultBinaryTree, DefaultPieceHasher>,
     > = StackedCompound::setup(&compound_setup_params)?;
 
     let mut public_inputs = Vec::with_capacity(l);
