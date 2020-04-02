@@ -262,11 +262,11 @@ impl<
     fn new_from_proof(
         p: &proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
     ) -> Result<Self> {
-        if p.top_layer_nodes > 0 {
+        if p.top_layer_nodes() > 0 {
             Ok(MerkleProof {
                 data: ProofData::Top(TopProof::new_from_proof(p)?),
             })
-        } else if p.sub_tree_layer_nodes > 0 {
+        } else if p.sub_layer_nodes() > 0 {
             Ok(MerkleProof {
                 data: ProofData::Sub(SubProof::new_from_proof(p)?),
             })
@@ -349,7 +349,7 @@ impl<
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MerkleTreeWrapper")
-            .field("inner", &"MerkleTree") // TODO: proper implementation in MerkleLight
+            .field("inner", &self.inner)
             .field("Hasher", &H::name())
             .finish()
     }
@@ -656,7 +656,16 @@ impl<
     > MerkleProof<H, BaseArity, SubTreeArity, TopTreeArity>
 {
     pub fn new(n: usize) -> Self {
-        todo!()
+        let root = Default::default();
+        let leaf = Default::default();
+        let path_elem = PathElement {
+            hashes: vec![Default::default()],
+            index: 0
+        };
+        let path = vec![path_elem; n];
+        MerkleProof {
+            data: ProofData::Single(SingleProof::new(root, leaf, path))
+        }
     }
 }
 
@@ -769,7 +778,7 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
         p: &proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
     ) -> Result<Self> {
         ensure!(
-            p.sub_tree_layer_nodes == Self::SubTreeArity::to_usize(),
+            p.sub_layer_nodes() == Self::SubTreeArity::to_usize(),
             "sub arity mis-match"
         );
         ensure!(
@@ -837,7 +846,7 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
     }
 
     fn path(&self) -> Vec<(Vec<H::Domain>, usize)> {
-        todo!()
+        self.base_proof.path()
     }
 
     fn proves_challenge(&self, challenge: usize) -> bool {
@@ -864,11 +873,11 @@ impl<
         p: &proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
     ) -> Result<Self> {
         ensure!(
-            p.top_layer_nodes == Self::TopTreeArity::to_usize(),
+            p.top_layer_nodes() == Self::TopTreeArity::to_usize(),
             "top arity mis-match"
         );
         ensure!(
-            p.sub_tree_layer_nodes == Self::SubTreeArity::to_usize(),
+            p.sub_layer_nodes() == Self::SubTreeArity::to_usize(),
             "sub arity mis-match"
         );
 
@@ -943,7 +952,7 @@ impl<
     }
 
     fn path(&self) -> Vec<(Vec<H::Domain>, usize)> {
-        todo!()
+        self.base_proof.path()
     }
 
     fn proves_challenge(&self, challenge: usize) -> bool {
