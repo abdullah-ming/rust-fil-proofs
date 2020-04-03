@@ -166,7 +166,25 @@ pub trait MerkleProofTrait:
 
     /// Calcluates the exected length of the full path, given the number of leaves in the base layer.
     fn expected_len(&self, leaves: usize) -> usize {
-        compound_tree_height::<Self::Arity, Self::SubTreeArity, Self::TopTreeArity>(leaves)
+        let leaves = if Self::TopTreeArity::to_usize() > 0 {
+            leaves / Self::TopTreeArity::to_usize() / Self::SubTreeArity::to_usize()
+        } else if Self::SubTreeArity::to_usize() > 0 {
+            leaves / Self::SubTreeArity::to_usize()
+        } else {
+            leaves
+        };
+
+        let mut len = graph_height::<Self::Arity>(leaves) - 1;
+
+        if Self::SubTreeArity::to_usize() > 0 {
+            len += 1;
+        }
+
+        if Self::TopTreeArity::to_usize() > 0 {
+            len += 1;
+        }
+
+        len
     }
 }
 
@@ -1137,8 +1155,16 @@ impl<
         let base_p = sub_p.sub_tree_proof.as_ref().unwrap();
 
         let base_proof = proof_to_single::<Self::Hasher, Self::Arity, Self::Arity>(base_p, 1, None);
-        let sub_proof = proof_to_single::<Self::Hasher, Self::Arity, Self::SubTreeArity>(sub_p, 0, Some(base_p.root()));
-        let top_proof = proof_to_single::<Self::Hasher, Self::Arity, Self::TopTreeArity>(p, 0, Some(sub_p.root()));
+        let sub_proof = proof_to_single::<Self::Hasher, Self::Arity, Self::SubTreeArity>(
+            sub_p,
+            0,
+            Some(base_p.root()),
+        );
+        let top_proof = proof_to_single::<Self::Hasher, Self::Arity, Self::TopTreeArity>(
+            p,
+            0,
+            Some(sub_p.root()),
+        );
 
         assert!(base_proof.verify());
         assert!(sub_proof.verify());
