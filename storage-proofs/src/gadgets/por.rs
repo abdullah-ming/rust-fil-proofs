@@ -194,17 +194,15 @@ impl<'a, Tree: MerkleTreeTrait> Circuit<Bls12> for PoRCircuit<Tree> {
             for (i, (elements, indexes)) in auth_path.into_iter().enumerate() {
                 let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
 
-                let index_bit_count = if elements.len() == base_arity {
-                    log_base_arity
-                } else if elements.len() == sub_arity {
-                    log_sub_arity
-                } else if elements.len() == top_arity {
-                    log_top_arity
-                } else {
-                    panic!(
+                let arity_for_elements = elements.len() + 1;
+                let index_bit_count = match arity_for_elements {
+                    x if x == base_arity => log_base_arity,
+                    x if x == sub_arity => log_sub_arity,
+                    x if x == top_arity => log_top_arity,
+                    _ => panic!(
                         "wrong number of elements in inclusion proof path step: {}",
                         elements.len()
-                    )
+                    ),
                 };
 
                 let mut index_bits = Vec::with_capacity(index_bit_count);
@@ -218,7 +216,7 @@ impl<'a, Tree: MerkleTreeTrait> Circuit<Bls12> for PoRCircuit<Tree> {
 
                 auth_path_bits.extend_from_slice(&index_bits);
 
-                // Witness the authentication path element adjacent
+                // Witness the authentication path elements adjacent
                 // at this depth.
                 let path_elements = elements
                     .iter()
@@ -313,6 +311,11 @@ mod tests {
     type TestTree<H, A> =
         MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>, A, typenum::U0, typenum::U0>;
 
+    type TestTree2<H, A, B> =
+        MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>, A, B, typenum::U0>;
+
+    type TestTree3<H, A, B, C> = MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>, A, B, C>;
+
     type ResTree<Tree> = MerkleTreeWrapper<
         <Tree as MerkleTreeTrait>::Hasher,
         <Tree as MerkleTreeTrait>::Store,
@@ -322,18 +325,17 @@ mod tests {
     >;
 
     #[allow(clippy::type_complexity)]
-    fn generate_tree<R: Rng, Tree: MerkleTreeTrait>(
+    fn generate_base_tree<R: Rng, Tree: MerkleTreeTrait>(
         rng: &mut R,
-        size: usize,
+        nodes: usize,
     ) -> (Vec<u8>, ResTree<Tree>) {
-        let elements = (0..size)
+        let elements = (0..nodes)
             .map(|_| <Tree::Hasher as Hasher>::Domain::random(rng))
             .collect::<Vec<_>>();
         let mut data = Vec::new();
         for el in &elements {
             data.extend_from_slice(AsRef::<[u8]>::as_ref(el));
         }
-
         (
             data,
             MerkleTreeWrapper::try_from_iter(elements.iter().map(|v| Ok(*v))).unwrap(),
@@ -343,40 +345,35 @@ mod tests {
     #[allow(clippy::type_complexity)]
     fn generate_sub_tree<R: Rng, Tree: MerkleTreeTrait>(
         rng: &mut R,
-        size: usize,
+        nodes: usize,
     ) -> (Vec<u8>, ResTree<Tree>) {
-        let base_tree_count = Tree::Arity::to_usize();
+        let base_tree_count = Tree::SubTreeArity::to_usize();
+        let base_tree_size = nodes / base_tree_count;
         let mut trees = Vec::with_capacity(base_tree_count);
         let mut data = Vec::new();
+
         for _ in 0..base_tree_count {
-            let (inner_data, tree) = generate_tree::<
+            let (inner_data, tree) = generate_base_tree::<
                 R,
-                MerkleTreeWrapper<Tree::Hasher, Tree::Store, Tree::Arity, typenum::U0, typenum::U0>,
-            >(rng, size / base_tree_count);
+                MerkleTreeWrapper<Tree::Hasher, Tree::Store, Tree::Arity>,
+            >(rng, base_tree_size);
             trees.push(tree);
             data.extend(inner_data);
         }
         (data, MerkleTreeWrapper::from_trees(trees).unwrap())
     }
 
-    fn generate_top_tree<Tree: MerkleTreeTrait, R: Rng>(
+    fn generate_tree<Tree: MerkleTreeTrait, R: Rng>(
         rng: &mut R,
         nodes: usize,
     ) -> (Vec<u8>, ResTree<Tree>) {
-        let base_tree_count = Tree::Arity::to_usize();
-        let sub_tree_count = Tree::SubTreeArity::to_usize();
-        let top_tree_count = Tree::TopTreeArity::to_usize();
+        let sub_tree_arity = Tree::SubTreeArity::to_usize();
+        let top_tree_arity = Tree::TopTreeArity::to_usize();
 
-        dbg!(
-            Tree::Arity::to_usize(),
-            Tree::SubTreeArity::to_usize(),
-            Tree::TopTreeArity::to_usize(),
-        );
-
-        if (top_tree_count > 0) && (sub_tree_count > 0) {
-            let mut sub_trees = Vec::with_capacity(sub_tree_count);
+        if (top_tree_arity > 0) {
+            let mut sub_trees = Vec::with_capacity(top_tree_arity);
             let mut data = Vec::new();
-            for i in 0..top_tree_count {
+            for i in 0..top_tree_arity {
                 let (inner_data, tree) = generate_sub_tree::<
                     R,
                     MerkleTreeWrapper<
@@ -386,16 +383,17 @@ mod tests {
                         Tree::SubTreeArity,
                         typenum::U0,
                     >,
-                >(rng, nodes / top_tree_count);
+                >(rng, nodes / top_tree_arity);
+
                 sub_trees.push(tree);
                 data.extend(inner_data);
             }
             (data, MerkleTreeWrapper::from_sub_trees(sub_trees).unwrap())
         } else {
-            if sub_tree_count > 0 {
-                unimplemented!()
+            if sub_tree_arity > 0 {
+                generate_sub_tree::<R, Tree>(rng, nodes)
             } else {
-                generate_tree::<R, Tree>(rng, nodes)
+                generate_base_tree::<R, Tree>(rng, nodes)
             }
         }
     }
@@ -534,24 +532,54 @@ mod tests {
         test_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U8>>(1_137);
     }
 
+    #[test]
+    fn test_por_input_circuit_with_bls12_381_poseidon_oct_binary() {
+        test_por_input_circuit_with_bls12_381::<TestTree2<PoseidonHasher, typenum::U8, typenum::U2>>(
+            1_137,
+        );
+    }
+
+    #[test]
+    fn test_por_input_circuit_with_bls12_381_poseidon_oct_quad_binary() {
+        test_por_input_circuit_with_bls12_381::<
+            TestTree3<PoseidonHasher, typenum::U8, typenum::U4, typenum::U2>,
+        >(1_137);
+    }
+
     fn test_por_input_circuit_with_bls12_381<Tree: MerkleTreeTrait>(num_constraints: usize) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let arity = Tree::Arity::to_usize();
         assert_eq!(1, arity.count_ones());
 
+        let sub_arity = Tree::SubTreeArity::to_usize();
+        if sub_arity > 0 {
+            assert_eq!(1, sub_arity.count_ones());
+        }
+
+        let top_arity = Tree::TopTreeArity::to_usize();
+        if top_arity > 0 {
+            assert_eq!(1, top_arity.count_ones());
+        }
+
         // Ensure arity will evenly fill tree.
-        let leaves = 64; // good for 2, 4 and 8
+        //        let leaves = 64;
+        let mut leaves = 64; // good for 2, 4 and 8
+
+        if sub_arity > 0 {
+            leaves *= sub_arity;
+        }
+
+        if top_arity > 0 {
+            leaves *= top_arity;
+        }
 
         for i in 0..leaves {
             // -- Basic Setup
 
-            let (data, tree) = generate_top_tree::<Tree, _>(rng, leaves);
+            let (data, tree) = generate_tree::<Tree, _>(rng, leaves);
+
             // -- PoR
-            dbg!(&data
-                .chunks(32)
-                .map(|x| <Tree::Hasher as Hasher>::Domain::try_from_bytes(x))
-                .collect::<Vec<_>>());
             let pub_params = por::PublicParams {
                 leaves,
                 private: true,
@@ -563,10 +591,8 @@ mod tests {
             let leaf = data_at_node(data.as_slice(), pub_inputs.challenge).unwrap();
             let leaf_element = <Tree::Hasher as Hasher>::Domain::try_from_bytes(leaf).unwrap();
             let priv_inputs = por::PrivateInputs::<ResTree<Tree>>::new(leaf_element, &tree);
-            dbg!(&priv_inputs, &data[i], &leaf_element);
             let p = tree.gen_proof(i).unwrap();
             assert!(p.verify());
-            dbg!(&i, p.verify(), &p);
 
             // create a non circuit proof
             let proof = por::PoR::<ResTree<Tree>>::prove(&pub_params, &pub_inputs, &priv_inputs)
