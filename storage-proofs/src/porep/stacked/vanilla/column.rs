@@ -6,9 +6,7 @@ use super::{column_proof::ColumnProof, hash::hash_single_column};
 
 use crate::error::Result;
 use crate::hasher::Hasher;
-use crate::merkle::{
-    MerkleProof, MerkleProofTrait, OctMerkleTree, OctSubMerkleTree, OctTopMerkleTree,
-};
+use crate::merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, Store};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Column<H: Hasher> {
@@ -58,25 +56,11 @@ impl<H: Hasher> Column<H> {
     }
 
     /// Create a column proof for this column.
-    pub fn into_proof(self, tree_c: &OctMerkleTree<H>) -> Result<ColumnProof<H>> {
-        let inclusion_proof =
-            MerkleProof::new_from_proof(&tree_c.gen_proof(self.index() as usize)?)?;
-        ColumnProof::<H>::from_column(self, inclusion_proof)
-    }
-
-    /// Create a column proof for this column.
-    pub fn into_proof_sub(self, tree_c: &OctSubMerkleTree<H>) -> Result<ColumnProof<H>> {
-        let tree_c_proof = tree_c.gen_proof(self.index() as usize)?;
-        assert!(tree_c_proof.sub_tree_proof.is_some());
-        let inclusion_proof = MerkleProof::new_from_proof(&tree_c_proof)?;
-        ColumnProof::<H>::from_column(self, inclusion_proof)
-    }
-
-    /// Create a column proof for this column.
-    pub fn into_proof_top(self, tree_c: &OctTopMerkleTree<H>) -> Result<ColumnProof<H>> {
-        let tree_c_proof = tree_c.gen_proof(self.index() as usize)?;
-        assert!(tree_c_proof.sub_tree_proof.is_some());
-        let inclusion_proof = MerkleProof::new_from_proof(&tree_c_proof)?;
-        ColumnProof::<H>::from_column(self, inclusion_proof)
+    pub fn into_proof<S: Store<H::Domain>, Tree: MerkleTreeTrait<Hasher = H, Store = S>>(
+        self,
+        tree_c: &Tree,
+    ) -> Result<ColumnProof<Tree::Proof>> {
+        let inclusion_proof = tree_c.gen_proof(self.index() as usize)?;
+        ColumnProof::<Tree::Proof>::from_column(self, inclusion_proof)
     }
 }

@@ -10,43 +10,40 @@ use crate::hasher::Hasher;
 use crate::merkle::{IncludedNode, MerkleProof, MerkleProofTrait};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ColumnProof<H: Hasher> {
+pub struct ColumnProof<Proof: MerkleProofTrait> {
     #[serde(bound(
-        serialize = "Column<H>: Serialize",
-        deserialize = "Column<H>: Deserialize<'de>"
+        serialize = "Column<Proof::Hasher>: Serialize",
+        deserialize = "Column<Proof::Hasher>: Deserialize<'de>"
     ))]
-    pub(crate) column: Column<H>,
+    pub(crate) column: Column<Proof::Hasher>,
     #[serde(bound(
-        serialize = "MerkleProof<H, typenum::U8>: Serialize",
-        deserialize = "MerkleProof<H, typenum::U8>: Deserialize<'de>"
+        serialize = "Proof: Serialize",
+        deserialize = "Proof: serde::de::DeserializeOwned"
     ))]
-    pub(crate) inclusion_proof: MerkleProof<H, typenum::U8>,
+    pub(crate) inclusion_proof: Proof,
 }
 
-impl<H: Hasher> ColumnProof<H> {
-    pub fn from_column(
-        column: Column<H>,
-        inclusion_proof: MerkleProof<H, typenum::U8>,
-    ) -> Result<Self> {
+impl<Proof: MerkleProofTrait> ColumnProof<Proof> {
+    pub fn from_column(column: Column<Proof::Hasher>, inclusion_proof: Proof) -> Result<Self> {
         Ok(ColumnProof {
             column,
             inclusion_proof,
         })
     }
 
-    pub fn root(&self) -> &H::Domain {
+    pub fn root(&self) -> &<Proof::Hasher as Hasher>::Domain {
         self.inclusion_proof.root()
     }
 
-    fn column(&self) -> &Column<H> {
+    fn column(&self) -> &Column<Proof::Hasher> {
         &self.column
     }
 
-    pub fn get_node_at_layer(&self, layer: usize) -> Result<&H::Domain> {
+    pub fn get_node_at_layer(&self, layer: usize) -> Result<&<Proof::Hasher as Hasher>::Domain> {
         self.column().get_node_at_layer(layer)
     }
 
-    pub fn get_verified_node_at_layer(&self, layer: usize) -> IncludedNode<H> {
+    pub fn get_verified_node_at_layer(&self, layer: usize) -> IncludedNode<Proof::Hasher> {
         let value = self.get_node_at_layer(layer).unwrap(); // FIXME: error handling
         IncludedNode::new(*value)
     }
@@ -55,7 +52,11 @@ impl<H: Hasher> ColumnProof<H> {
         self.column.hash()
     }
 
-    pub fn verify(&self, challenge: u32, expected_root: &H::Domain) -> bool {
+    pub fn verify(
+        &self,
+        challenge: u32,
+        expected_root: &<Proof::Hasher as Hasher>::Domain,
+    ) -> bool {
         let c_i = self.column_hash();
 
         check_eq!(self.inclusion_proof.root(), expected_root);

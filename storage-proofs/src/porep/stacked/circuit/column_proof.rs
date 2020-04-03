@@ -6,16 +6,23 @@ use paired::bls12_381::{Bls12, Fr};
 use super::{column::Column, params::InclusionPath};
 
 use crate::gadgets::constraint;
-use crate::hasher::Hasher;
+use crate::hasher::{Hasher, PoseidonArity};
+use crate::merkle::{MerkleProofTrait, MerkleTreeTrait};
 use crate::porep::stacked::{ColumnProof as VanillaColumnProof, PublicParams};
 
 #[derive(Debug, Clone)]
-pub struct ColumnProof<H: Hasher> {
+pub struct ColumnProof<H: Hasher, U: PoseidonArity, V: PoseidonArity, W: PoseidonArity> {
     column: Column,
-    inclusion_path: InclusionPath<H, typenum::U8, typenum::U0, typenum::U0>,
+    inclusion_path: InclusionPath<H, U, V, W>,
 }
 
-impl<H: Hasher> ColumnProof<H> {
+impl<
+        H: Hasher,
+        U: 'static + PoseidonArity,
+        V: 'static + PoseidonArity,
+        W: 'static + PoseidonArity,
+    > ColumnProof<H, U, V, W>
+{
     /// Create an empty `ColumnProof`, used in `blank_circuit`s.
     pub fn empty(params: &PublicParams<H>) -> Self {
         ColumnProof {
@@ -55,8 +62,10 @@ impl<H: Hasher> ColumnProof<H> {
     }
 }
 
-impl<H: Hasher> From<VanillaColumnProof<H>> for ColumnProof<H> {
-    fn from(vanilla_proof: VanillaColumnProof<H>) -> Self {
+impl<Proof: MerkleProofTrait> From<VanillaColumnProof<Proof>>
+    for ColumnProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>
+{
+    fn from(vanilla_proof: VanillaColumnProof<Proof>) -> Self {
         let VanillaColumnProof {
             column,
             inclusion_proof,

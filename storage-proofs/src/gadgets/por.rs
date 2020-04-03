@@ -534,7 +534,7 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     use merkletree::merkle::{is_merkle_tree_size_valid, FromIndexedParallelIterator, MerkleTree};
-    use merkletree::store::{Store, VecStore};
+    use merkletree::store::VecStore;
 
     use crate::compound_proof;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};

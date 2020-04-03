@@ -22,7 +22,8 @@ pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
     pub comm_d_proof: InclusionPath<G, typenum::U2, typenum::U0, typenum::U0>,
     pub comm_r_last_proof:
         InclusionPath<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-    pub replica_column_proof: ReplicaColumnProof<Tree::Hasher>,
+    pub replica_column_proof:
+        ReplicaColumnProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
     pub labeling_proofs: Vec<(usize, LabelingProof)>,
     pub encoding_proof: EncodingProof,
     _t: PhantomData<Tree>,
@@ -116,7 +117,10 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
     }
 }
 
-impl<Tree: MerkleTreeTrait, G: Hasher> From<VanillaProof<Tree, G>> for Proof<Tree, G> {
+impl<Tree: MerkleTreeTrait, G: Hasher> From<VanillaProof<Tree, G>> for Proof<Tree, G>
+where
+    Tree::Hasher: 'static,
+{
     fn from(vanilla_proof: VanillaProof<Tree, G>) -> Self {
         let VanillaProof {
             comm_d_proofs,
@@ -229,13 +233,19 @@ impl<
 }
 
 #[derive(Debug, Clone)]
-pub struct ReplicaColumnProof<H: Hasher> {
-    c_x: ColumnProof<H>,
-    drg_parents: Vec<ColumnProof<H>>,
-    exp_parents: Vec<ColumnProof<H>>,
+pub struct ReplicaColumnProof<H: Hasher, U: PoseidonArity, V: PoseidonArity, W: PoseidonArity> {
+    c_x: ColumnProof<H, U, V, W>,
+    drg_parents: Vec<ColumnProof<H, U, V, W>>,
+    exp_parents: Vec<ColumnProof<H, U, V, W>>,
 }
 
-impl<H: Hasher> ReplicaColumnProof<H> {
+impl<
+        H: Hasher,
+        U: 'static + PoseidonArity,
+        V: 'static + PoseidonArity,
+        W: 'static + PoseidonArity,
+    > ReplicaColumnProof<H, U, V, W>
+{
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty(params: &PublicParams<H>) -> Self {
         ReplicaColumnProof {
@@ -273,8 +283,15 @@ impl<H: Hasher> ReplicaColumnProof<H> {
     }
 }
 
-impl<H: Hasher> From<VanillaReplicaColumnProof<H>> for ReplicaColumnProof<H> {
-    fn from(vanilla_proof: VanillaReplicaColumnProof<H>) -> Self {
+impl<
+        H: 'static + Hasher,
+        U: 'static + PoseidonArity,
+        V: 'static + PoseidonArity,
+        W: 'static + PoseidonArity,
+        X: MerkleProofTrait<Hasher = H, Arity = U, SubTreeArity = V, TopTreeArity = W>,
+    > From<VanillaReplicaColumnProof<X>> for ReplicaColumnProof<H, U, V, W>
+{
+    fn from(vanilla_proof: VanillaReplicaColumnProof<X>) -> Self {
         let VanillaReplicaColumnProof {
             c_x,
             drg_parents,

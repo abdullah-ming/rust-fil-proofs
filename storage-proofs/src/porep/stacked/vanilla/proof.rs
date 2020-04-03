@@ -3,9 +3,7 @@ use std::marker::PhantomData;
 use std::path::PathBuf;
 
 use log::{info, trace};
-use merkletree::merkle::{
-    get_merkle_tree_len, is_merkle_tree_size_valid, FromIndexedParallelIterator,
-};
+use merkletree::merkle::{get_merkle_tree_len, is_merkle_tree_size_valid};
 use merkletree::store::{DiskStore, StoreConfig};
 use rayon::prelude::*;
 
@@ -116,103 +114,29 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                         // Stacked replica column openings
                         let rcp = {
-                            let (c_x, drg_parents, exp_parents) = match sector_size {
-                                SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB => {
-                                    assert!(t_aux.tree_c.octtree().is_some());
-                                    assert_eq!(
-                                        p_aux.comm_c,
-                                        t_aux.tree_c.octtree().unwrap().root()
-                                    );
-                                    let tree_c = &t_aux.tree_c.octtree().unwrap();
+                            let (c_x, drg_parents, exp_parents) = {
+                                assert_eq!(p_aux.comm_c, t_aux.tree_c.root());
+                                let tree_c = &t_aux.tree_c;
 
-                                    // All labels in C_X
-                                    trace!("  c_x");
-                                    let c_x = t_aux.column(challenge as u32)?.into_proof(tree_c)?;
+                                // All labels in C_X
+                                trace!("  c_x");
+                                let c_x = t_aux.column(challenge as u32)?.into_proof(tree_c)?;
 
-                                    // All labels in the DRG parents.
-                                    trace!("  drg_parents");
-                                    let drg_parents = get_drg_parents_columns(challenge)?
-                                        .into_iter()
-                                        .map(|column| column.into_proof(tree_c))
-                                        .collect::<Result<_>>()?;
+                                // All labels in the DRG parents.
+                                trace!("  drg_parents");
+                                let drg_parents = get_drg_parents_columns(challenge)?
+                                    .into_iter()
+                                    .map(|column| column.into_proof(tree_c))
+                                    .collect::<Result<_>>()?;
 
-                                    // Labels for the expander parents
-                                    trace!("  exp_parents");
-                                    let exp_parents = get_exp_parents_columns(challenge)?
-                                        .into_iter()
-                                        .map(|column| column.into_proof(tree_c))
-                                        .collect::<Result<_>>()?;
+                                // Labels for the expander parents
+                                trace!("  exp_parents");
+                                let exp_parents = get_exp_parents_columns(challenge)?
+                                    .into_iter()
+                                    .map(|column| column.into_proof(tree_c))
+                                    .collect::<Result<_>>()?;
 
-                                    (c_x, drg_parents, exp_parents)
-                                }
-                                SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB
-                                | SECTOR_SIZE_32_GIB => {
-                                    let sub_tree_count = 2;
-                                    let base_tree_leafs = base_tree_leafs / sub_tree_count;
-
-                                    assert!(t_aux.tree_c.octsubtree().is_some());
-                                    assert_eq!(
-                                        p_aux.comm_c,
-                                        t_aux.tree_c.octsubtree().unwrap().root()
-                                    );
-                                    let tree_c = t_aux.tree_c.octsubtree().unwrap();
-
-                                    // All labels in C_X
-                                    trace!("  c_x");
-                                    let c_x =
-                                        t_aux.column(challenge as u32)?.into_proof_sub(tree_c)?;
-
-                                    // All labels in the DRG parents.
-                                    trace!("  drg_parents");
-                                    let drg_parents = get_drg_parents_columns(challenge)?
-                                        .into_iter()
-                                        .map(|column| column.into_proof_sub(tree_c))
-                                        .collect::<Result<_>>()?;
-
-                                    // Labels for the expander parents
-                                    trace!("  exp_parents");
-                                    let exp_parents = get_exp_parents_columns(challenge)?
-                                        .into_iter()
-                                        .map(|column| column.into_proof_sub(tree_c))
-                                        .collect::<Result<_>>()?;
-
-                                    (c_x, drg_parents, exp_parents)
-                                }
-                                SECTOR_SIZE_32_KIB | SECTOR_SIZE_64_GIB => {
-                                    let top_tree_count = 2;
-                                    let sub_tree_count = 8;
-                                    let base_tree_leafs =
-                                        base_tree_leafs / (top_tree_count * sub_tree_count);
-
-                                    assert!(t_aux.tree_c.octtoptree().is_some());
-                                    assert_eq!(
-                                        p_aux.comm_c,
-                                        t_aux.tree_c.octtoptree().unwrap().root()
-                                    );
-                                    let tree_c = t_aux.tree_c.octtoptree().unwrap();
-
-                                    // All labels in C_X
-                                    trace!("  c_x");
-                                    let c_x =
-                                        t_aux.column(challenge as u32)?.into_proof_top(tree_c)?;
-
-                                    // All labels in the DRG parents.
-                                    trace!("  drg_parents");
-                                    let drg_parents = get_drg_parents_columns(challenge)?
-                                        .into_iter()
-                                        .map(|column| column.into_proof_top(tree_c))
-                                        .collect::<Result<_>>()?;
-
-                                    // Labels for the expander parents
-                                    trace!("  exp_parents");
-                                    let exp_parents = get_exp_parents_columns(challenge)?
-                                        .into_iter()
-                                        .map(|column| column.into_proof_top(tree_c))
-                                        .collect::<Result<_>>()?;
-
-                                    (c_x, drg_parents, exp_parents)
-                                }
-                                _ => panic!("Unsupported data len"),
+                                (c_x, drg_parents, exp_parents)
                             };
 
                             ReplicaColumnProof {
