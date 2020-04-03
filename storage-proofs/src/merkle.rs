@@ -166,28 +166,31 @@ pub trait MerkleProofTrait:
 
     /// Calcluates the exected length of the full path, given the number of leaves in the base layer.
     fn expected_len(&self, leaves: usize) -> usize {
-        let leaves = if Self::TopTreeArity::to_usize() > 0 {
-            leaves / Self::TopTreeArity::to_usize() / Self::SubTreeArity::to_usize()
-        } else if Self::SubTreeArity::to_usize() > 0 {
-            leaves / Self::SubTreeArity::to_usize()
-        } else {
-            leaves
-        };
-
-        let mut len = graph_height::<Self::Arity>(leaves) - 1;
-
-        if Self::SubTreeArity::to_usize() > 0 {
-            len += 1;
-        }
-
-        if Self::TopTreeArity::to_usize() > 0 {
-            len += 1;
-        }
-
-        len
+        compound_path_length::<Self::Arity, Self::SubTreeArity, Self::TopTreeArity>(leaves)
     }
 }
 
+pub fn compound_path_length<A: Unsigned, B: Unsigned, C: Unsigned>(leaves: usize) -> usize {
+    let leaves = if C::to_usize() > 0 {
+        leaves / C::to_usize() / B::to_usize()
+    } else if B::to_usize() > 0 {
+        leaves / B::to_usize()
+    } else {
+        leaves
+    };
+
+    let mut len = graph_height::<A>(leaves) - 1;
+
+    if B::to_usize() > 0 {
+        len += 1;
+    }
+
+    if C::to_usize() > 0 {
+        len += 1;
+    }
+
+    len
+}
 pub fn compound_tree_height<A: Unsigned, B: Unsigned, C: Unsigned>(leaves: usize) -> usize {
     // base layer
     let a = graph_height::<A>(leaves) - 1;
