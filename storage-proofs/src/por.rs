@@ -108,7 +108,6 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for PoR<Tree> {
             ensure!(commitment == &tree.root(), Error::InvalidCommitment);
         }
         let proof = tree.gen_proof(challenge)?;
-        dbg!(&proof);
         Ok(Self::Proof {
             proof,
             data: priv_inputs.leaf,
@@ -133,11 +132,6 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for PoR<Tree> {
             if !(commitments_match && path_length_match) {
                 return Ok(false);
             }
-            dbg!(
-                &commitments_match,
-                &expected_path_length,
-                &path_length_match,
-            );
         }
 
         let data_valid = proof.proof.validate_data(proof.data);
