@@ -189,6 +189,10 @@ impl<
 
     fn gen_proof(&self, i: usize) -> Result<Self::Proof> {
         let proof = self.inner.gen_proof(i)?;
+
+        // For development and debugging.
+        assert!(proof.clone().validate::<H::Function>().unwrap());
+
         MerkleProof::new_from_proof(&proof)
     }
 
@@ -977,7 +981,7 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
     ) -> Result<Self> {
         ensure!(
             p.sub_layer_nodes() == Self::SubTreeArity::to_usize(),
-            "sub arity mis-match"
+            "sub arity mismatch"
         );
         ensure!(
             p.sub_tree_proof.is_some(),
@@ -988,17 +992,24 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
         // Generate SubProof
         let base_proof = proof_to_single(base_p, 1);
         let sub_proof = proof_to_single(p, 0);
+        // dbg!(&base_p.lemma(), &p.lemma());
+        // dbg!(&base_proof, &sub_proof);
+        // assert!(base_proof.root == sub_proof.leaf);
 
         Ok(SubProof::new(base_proof, sub_proof))
     }
 
     fn verify(&self) -> bool {
-        if !self.base_proof.verify() {
+        let base_proof_verifies = self.base_proof.verify();
+        let base_root_equals_sub_leaf = self.base_proof.root == self.sub_proof.leaf;
+
+        if !(base_proof_verifies && base_root_equals_sub_leaf) {
+            dbg!(base_proof_verifies, base_root_equals_sub_leaf,);
             return false;
         }
 
         let mut a = H::Function::default();
-        let expected_root = (0..self.sub_proof.path.len()).fold(self.sub_proof.leaf, |h, i| {
+        let expected_root = (0..self.sub_proof.path.len()).fold(self.base_proof.root, |h, i| {
             a.reset();
 
             let index = self.sub_proof.path[i].index;
@@ -1007,6 +1018,13 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
 
             a.multi_node(&nodes, i)
         });
+        dbg!(
+            self.base_proof.path().len(),
+            self.sub_proof.path().len(),
+            self.path().len(),
+            self.root(),
+            &expected_root
+        );
         self.root() == &expected_root
     }
 
@@ -1070,11 +1088,11 @@ impl<
     ) -> Result<Self> {
         ensure!(
             p.top_layer_nodes() == Self::TopTreeArity::to_usize(),
-            "top arity mis-match"
+            "top arity mismatch"
         );
         ensure!(
             p.sub_layer_nodes() == Self::SubTreeArity::to_usize(),
-            "sub arity mis-match"
+            "sub arity mismatch"
         );
 
         ensure!(
@@ -1098,12 +1116,27 @@ impl<
     }
 
     fn verify(&self) -> bool {
-        if !self.sub_proof.verify() || !self.base_proof.verify() {
+        let sub_proof_verifies = self.sub_proof.verify();
+        let base_proof_verifies = self.base_proof.verify();
+        let base_root_equals_sub_leaf = self.base_proof.root == self.sub_proof.leaf;
+        let sub_root_equals_top_leaf = self.sub_proof.root != self.top_proof.leaf;
+
+        if !(sub_proof_verifies
+            && base_proof_verifies
+            && base_root_equals_sub_leaf
+            && sub_root_equals_top_leaf)
+        {
+            dbg!(
+                sub_proof_verifies,
+                base_proof_verifies,
+                base_root_equals_sub_leaf,
+                sub_root_equals_top_leaf
+            );
             return false;
         }
 
         let mut a = H::Function::default();
-        let expected_root = (0..self.top_proof.path.len()).fold(self.top_proof.leaf, |h, i| {
+        let expected_root = (0..self.top_proof.path.len()).fold(self.sub_proof.root, |h, i| {
             a.reset();
 
             let index = self.top_proof.path[i].index;
@@ -1112,6 +1145,8 @@ impl<
 
             a.multi_node(&nodes, i)
         });
+
+        dbg!(self.root(), &expected_root);
 
         self.root() == &expected_root
     }
@@ -1444,7 +1479,7 @@ mod tests {
                 &tree.gen_proof(i).unwrap(),
             )
             .expect("failed to build sub-proof");
-
+            assert_eq!(proof.base_proof.root, proof.sub_proof.leaf);
             assert!(proof.verify(), "failed to validate");
 
             assert!(proof.validate(i), "failed to validate valid merkle path");
