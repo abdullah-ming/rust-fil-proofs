@@ -594,6 +594,11 @@ mod tests {
         let top_tree_arity = Tree::TopTreeArity::to_usize();
 
         if top_tree_arity > 0 {
+            assert!(
+                sub_tree_arity != 0,
+                "malformed tree with TopTreeArity > 0 and SubTreeARity == 0"
+            );
+
             let mut sub_trees = Vec::with_capacity(top_tree_arity);
             let mut data = Vec::new();
             for _i in 0..top_tree_arity {
@@ -763,6 +768,13 @@ mod tests {
     #[test]
     fn test_por_circuit_poseidon_top_8_4_2() {
         test_por_circuit::<TestTree3<PoseidonHasher, typenum::U8, typenum::U4, typenum::U2>>(
+            5, 1_850,
+        );
+    }
+
+    #[test]
+    fn test_por_circuit_poseidon_top_8_0_4() {
+        test_por_circuit::<TestTree3<PoseidonHasher, typenum::U8, typenum::U0, typenum::U4>>(
             5, 1_850,
         );
     }
