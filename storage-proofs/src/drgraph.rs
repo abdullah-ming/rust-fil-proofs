@@ -13,7 +13,8 @@ use crate::error::*;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Hasher, PoseidonArity};
 use crate::merkle::{
-    create_lcmerkle_tree, create_merkle_tree, open_lcmerkle_tree, LCMerkleTree, MerkleTreeTrait,
+    create_lcmerkle_tree, create_merkle_tree, open_lcmerkle_tree, LCMerkleTree, LCTree,
+    MerkleTreeTrait,
 };
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node_offset, NODE_SIZE};
@@ -56,12 +57,16 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
 
     /// Returns a merkle tree based on the given config, replica and
     /// level cache data.
-    fn lcmerkle_open<U: 'static + PoseidonArity>(
+    fn lcmerkle_open<
+        U: 'static + PoseidonArity,
+        V: 'static + PoseidonArity,
+        W: 'static + PoseidonArity,
+    >(
         &self,
         config: StoreConfig,
         replica_path: &PathBuf,
-    ) -> Result<LCMerkleTree<H, U>> {
-        open_lcmerkle_tree::<H, U>(config, self.size(), replica_path)
+    ) -> Result<LCTree<H, U, V, W>> {
+        open_lcmerkle_tree::<H, U, V, W>(config, self.size(), replica_path)
     }
 
     /// Returns the merkle tree depth.

@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
-use generic_array::typenum;
+use generic_array::typenum::{self, Unsigned};
 use log::trace;
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{DiskStore, Store, StoreConfig};
@@ -119,52 +119,65 @@ pub struct PrivateInputs<Tree: MerkleTreeTrait, G: Hasher> {
     pub t_aux: TemporaryAuxCache<Tree, G>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Proof<H: Hasher, G: Hasher> {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
     #[serde(bound(
         serialize = "MerkleProof<G, typenum::U2>: Serialize",
         deserialize = "MerkleProof<G, typenum::U2>: Deserialize<'de>"
     ))]
     pub comm_d_proofs: MerkleProof<G, typenum::U2>,
     #[serde(bound(
-        serialize = "MerkleProof<H, typenum::U8>: Serialize, ColumnProof<H>: Serialize",
-        deserialize = "MerkleProof<H, typenum::U8>: Deserialize<'de>, ColumnProof<H>: Deserialize<'de>"
+        serialize = "MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>: Serialize",
+        deserialize = "MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>: Deserialize<'de>"
     ))]
-    pub comm_r_last_proof: MerkleProof<H, typenum::U8>,
+    pub comm_r_last_proof:
+        MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
     #[serde(bound(
-        serialize = "ReplicaColumnProof<H>: Serialize",
-        deserialize = "ReplicaColumnProof<H>: Deserialize<'de>"
+        serialize = "ReplicaColumnProof<Tree::Hasher>: Serialize",
+        deserialize = "ReplicaColumnProof<Tree::Hasher>: Deserialize<'de>"
     ))]
-    pub replica_column_proofs: ReplicaColumnProof<H>,
+    pub replica_column_proofs: ReplicaColumnProof<Tree::Hasher>,
     #[serde(bound(
-        serialize = "LabelingProof<H>: Serialize",
-        deserialize = "LabelingProof<H>: Deserialize<'de>"
+        serialize = "LabelingProof<Tree::Hasher>: Serialize",
+        deserialize = "LabelingProof<Tree::Hasher>: Deserialize<'de>"
     ))]
     /// Indexed by layer in 1..layers.
-    pub labeling_proofs: HashMap<usize, LabelingProof<H>>,
+    pub labeling_proofs: HashMap<usize, LabelingProof<Tree::Hasher>>,
     #[serde(bound(
-        serialize = "EncodingProof<H>: Serialize",
-        deserialize = "EncodingProof<H>: Deserialize<'de>"
+        serialize = "EncodingProof<Tree::Hasher>: Serialize",
+        deserialize = "EncodingProof<Tree::Hasher>: Deserialize<'de>"
     ))]
-    pub encoding_proof: EncodingProof<H>,
+    pub encoding_proof: EncodingProof<Tree::Hasher>,
 }
 
-impl<H: Hasher, G: Hasher> Proof<H, G> {
-    pub fn comm_r_last(&self) -> &H::Domain {
+impl<Tree: MerkleTreeTrait, G: Hasher> Clone for Proof<Tree, G> {
+    fn clone(&self) -> Self {
+        Self {
+            comm_d_proofs: self.comm_d_proofs.clone(),
+            comm_r_last_proof: self.comm_r_last_proof.clone(),
+            replica_column_proofs: self.replica_column_proofs.clone(),
+            labeling_proofs: self.labeling_proofs.clone(),
+            encoding_proof: self.encoding_proof.clone(),
+        }
+    }
+}
+
+impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
+    pub fn comm_r_last(&self) -> &<Tree::Hasher as Hasher>::Domain {
         self.comm_r_last_proof.root()
     }
 
-    pub fn comm_c(&self) -> &H::Domain {
+    pub fn comm_c(&self) -> &<Tree::Hasher as Hasher>::Domain {
         self.replica_column_proofs.c_x.root()
     }
 
     /// Verify the full proof.
     pub fn verify(
         &self,
-        pub_params: &PublicParams<H>,
-        pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
+        pub_params: &PublicParams<Tree::Hasher>,
+        pub_inputs: &PublicInputs<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>,
         challenge: usize,
-        graph: &StackedBucketGraph<H>,
+        graph: &StackedBucketGraph<Tree::Hasher>,
     ) -> bool {
         let replica_id = &pub_inputs.replica_id;
 
@@ -193,7 +206,8 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
         check!(self.verify_labels(replica_id, &pub_params.layer_challenges));
 
         trace!("verify encoding");
-        let sector_size = (graph.size() * std::mem::size_of::<H::Domain>()) as u64;
+        let sector_size =
+            (graph.size() * std::mem::size_of::<<Tree::Hasher as Hasher>::Domain>()) as u64;
         todo!();
         // match sector_size {
         //     SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB => {
@@ -246,7 +260,11 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
     }
 
     /// Verify all labels.
-    fn verify_labels(&self, replica_id: &H::Domain, layer_challenges: &LayerChallenges) -> bool {
+    fn verify_labels(
+        &self,
+        replica_id: &<Tree::Hasher as Hasher>::Domain,
+        layer_challenges: &LayerChallenges,
+    ) -> bool {
         // Verify Labels Layer 1..layers
         for layer in 1..=layer_challenges.layers() {
             trace!("verify labeling (layer: {})", layer,);
@@ -317,7 +335,7 @@ impl<H: Hasher> ReplicaColumnProof<H> {
     }
 }
 
-impl<H: Hasher, G: Hasher> Proof<H, G> {
+impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
     pub fn serialize(&self) -> Vec<u8> {
         unimplemented!();
     }
@@ -438,8 +456,8 @@ pub struct TemporaryAuxCache<Tree: MerkleTreeTrait, G: Hasher> {
     pub tree_d: BinaryMerkleTree<G>,
 
     // Notably this is a LevelCacheTree instead of a full merkle.
-    pub tree_r_last: OctTreeData<Tree::Hasher>,
-    //pub tree_r_last: Tree,
+    // pub tree_r_last: OctTreeData<Tree::Hasher>,
+    pub tree_r_last: LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
 
     // Store the 'cached_above_base layers' value from the tree_r_last
     // StoreConfig for later use (i.e. proof generation).
@@ -471,7 +489,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
         let sector_size =
             get_merkle_tree_leafs(tree_d_size, BINARY_ARITY) * std::mem::size_of::<G::Domain>();
 
-        if <Tree::TopTreeArity as typenum::Unsigned>::to_usize() > 0 {
+        if Tree::TopTreeArity::to_usize() > 0 {
             // Note: Given the shape of OctTopTree, a tree count
             // of 16 will yield 2 top layer trees, each consisting
             // of 8 sub layer trees.
@@ -515,24 +533,23 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
                                 .replace("\"", "")
                                 .as_str(),
                         )
-                            .to_path_buf(),
+                        .to_path_buf(),
                     );
                 }
 
                 (configs, replica_paths)
             };
 
-            let tree_r_last =
-                OctLCTopMerkleTree::<Tree::Hasher>::from_sub_tree_store_configs_and_replicas(
-                    tree_r_last_leafs,
-                    &configs,
-                    &replica_paths,
-                )?;
+            let tree_r_last = LCTree::from_sub_tree_store_configs_and_replicas(
+                tree_r_last_leafs,
+                &configs,
+                &replica_paths,
+            )?;
 
             Ok(TemporaryAuxCache {
                 labels: LabelsCache::new(&t_aux.labels).context("labels_cache")?,
                 tree_d,
-                tree_r_last: OctTreeData::OctLCTop(tree_r_last),
+                tree_r_last,
                 tree_r_last_config_levels,
                 tree_c: OctTreeData::OctTop(tree_c),
                 replica_path,
@@ -581,24 +598,23 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
                                 .replace("\"", "")
                                 .as_str(),
                         )
-                            .to_path_buf(),
+                        .to_path_buf(),
                     );
                 }
 
                 (configs, replica_paths)
             };
 
-            let tree_r_last =
-                OctLCSubMerkleTree::<Tree::Hasher>::from_store_configs_and_replicas(
-                    tree_r_last_leafs,
-                    &configs,
-                    &replica_paths,
-                )?;
+            let tree_r_last = LCTree::from_store_configs_and_replicas(
+                tree_r_last_leafs,
+                &configs,
+                &replica_paths,
+            )?;
 
             Ok(TemporaryAuxCache {
                 labels: LabelsCache::new(&t_aux.labels).context("labels_cache")?,
                 tree_d,
-                tree_r_last: OctTreeData::OctLCSub(tree_r_last),
+                tree_r_last,
                 tree_r_last_config_levels,
                 tree_c: OctTreeData::OctSub(tree_c),
                 replica_path,
@@ -613,12 +629,12 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
             );
             let tree_c_store: DiskStore<<Tree::Hasher as Hasher>::Domain> =
                 DiskStore::new_from_disk(tree_c_size, OCT_ARITY, &t_aux.tree_c_config)
-                .context("tree_c_store")?;
+                    .context("tree_c_store")?;
             let tree_c: OctMerkleTree<Tree::Hasher> = MerkleTree::from_data_store(
                 tree_c_store,
                 get_merkle_tree_leafs(tree_c_size, OCT_ARITY),
             )
-                .context("tree_c")?;
+            .context("tree_c")?;
 
             let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
             trace!(
@@ -627,18 +643,22 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
                 get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY)
             );
 
-            let tree_r_last: OctLCMerkleTree<Tree::Hasher> =
-                open_lcmerkle_tree::<Tree::Hasher, typenum::U8>(
-                    t_aux.tree_r_last_config.clone(),
-                    get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY),
-                    &replica_path,
-                )?;
+            let tree_r_last = open_lcmerkle_tree::<
+                Tree::Hasher,
+                Tree::Arity,
+                Tree::SubTreeArity,
+                Tree::TopTreeArity,
+            >(
+                t_aux.tree_r_last_config.clone(),
+                get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY),
+                &replica_path,
+            )?;
             let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;
 
             Ok(TemporaryAuxCache {
                 labels: LabelsCache::new(&t_aux.labels).context("labels_cache")?,
                 tree_d,
-                tree_r_last: OctTreeData::OctLC(tree_r_last),
+                tree_r_last,
                 tree_r_last_config_levels,
                 tree_c: OctTreeData::Oct(tree_c),
                 replica_path,

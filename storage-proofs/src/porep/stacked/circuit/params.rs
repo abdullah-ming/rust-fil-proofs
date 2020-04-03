@@ -12,23 +12,25 @@ use crate::drgraph::Graph;
 use crate::gadgets::por::PoRCircuit;
 use crate::gadgets::variables::Root;
 use crate::hasher::{Hasher, PoseidonArity};
-use crate::merkle::{DiskStore, MerkleProof, MerkleProofTrait, MerkleTreeWrapper};
+use crate::merkle::{DiskStore, MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper};
 use crate::porep::stacked::{
     Proof as VanillaProof, PublicParams, ReplicaColumnProof as VanillaReplicaColumnProof,
 };
 
 #[derive(Debug, Clone)]
-pub struct Proof<H: Hasher, G: Hasher> {
-    pub comm_d_proof: InclusionPath<G, typenum::U2>,
-    pub comm_r_last_proof: InclusionPath<H, typenum::U8>,
-    pub replica_column_proof: ReplicaColumnProof<H>,
+pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
+    pub comm_d_proof: InclusionPath<G, typenum::U2, typenum::U0, typenum::U0>,
+    pub comm_r_last_proof:
+        InclusionPath<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+    pub replica_column_proof: ReplicaColumnProof<Tree::Hasher>,
     pub labeling_proofs: Vec<(usize, LabelingProof)>,
     pub encoding_proof: EncodingProof,
+    _t: PhantomData<Tree>,
 }
 
-impl<H: Hasher, G: Hasher> Proof<H, G> {
+impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty(params: &PublicParams<H>) -> Self {
+    pub fn empty(params: &PublicParams<Tree::Hasher>) -> Self {
         let layers = params.layer_challenges.layers();
 
         let mut labeling_proofs = Vec::with_capacity(layers);
@@ -42,6 +44,7 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
             replica_column_proof: ReplicaColumnProof::empty(params),
             labeling_proofs,
             encoding_proof: EncodingProof::empty(params),
+            _t: PhantomData,
         }
     }
 
@@ -62,6 +65,7 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
             replica_column_proof,
             labeling_proofs,
             encoding_proof,
+            ..
         } = self;
 
         // verify initial data layer
@@ -112,8 +116,8 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
     }
 }
 
-impl<H: Hasher, G: Hasher> From<VanillaProof<H, G>> for Proof<H, G> {
-    fn from(vanilla_proof: VanillaProof<H, G>) -> Self {
+impl<Tree: MerkleTreeTrait, G: Hasher> From<VanillaProof<Tree, G>> for Proof<Tree, G> {
+    fn from(vanilla_proof: VanillaProof<Tree, G>) -> Self {
         let VanillaProof {
             comm_d_proofs,
             comm_r_last_proof,
@@ -135,27 +139,35 @@ impl<H: Hasher, G: Hasher> From<VanillaProof<H, G>> for Proof<H, G> {
             replica_column_proof: replica_column_proofs.into(),
             labeling_proofs,
             encoding_proof: encoding_proof.into(),
+            _t: PhantomData,
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct InclusionPath<H: Hasher, U>
+pub struct InclusionPath<H: Hasher, U, V, W>
 where
     U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
     value: Option<Fr>,
     auth_path: Vec<(Vec<Option<Fr>>, Option<usize>)>,
     _h: PhantomData<H>,
     _u: PhantomData<U>,
+    _v: PhantomData<V>,
+    _w: PhantomData<W>,
 }
 
-impl<U, H: Hasher> InclusionPath<H, U>
+impl<H: Hasher, U, V, W> InclusionPath<H, U, V, W>
 where
     U: 'static + PoseidonArity,
+    V: 'static + PoseidonArity,
+    W: 'static + PoseidonArity,
 {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty<G: Hasher>(graph: &impl Graph<G>) -> Self {
+        todo!("account for additional arities");
         InclusionPath {
             value: None,
             auth_path: vec![
@@ -164,6 +176,8 @@ where
             ],
             _h: PhantomData,
             _u: PhantomData,
+            _v: PhantomData,
+            _w: PhantomData,
         }
     }
 
@@ -192,8 +206,15 @@ where
     }
 }
 
-impl<H: Hasher, U: 'static + PoseidonArity> From<MerkleProof<H, U>> for InclusionPath<H, U> {
-    fn from(other: MerkleProof<H, U>) -> Self {
+impl<
+        H: Hasher,
+        U: 'static + PoseidonArity,
+        V: 'static + PoseidonArity,
+        W: 'static + PoseidonArity,
+        X: MerkleProofTrait<Hasher = H, Arity = U, SubTreeArity = V, TopTreeArity = W>,
+    > From<X> for InclusionPath<H, U, V, W>
+{
+    fn from(other: X) -> Self {
         let (value, auth_path) = other.into_options_with_leaf();
 
         InclusionPath {
@@ -201,6 +222,8 @@ impl<H: Hasher, U: 'static + PoseidonArity> From<MerkleProof<H, U>> for Inclusio
             auth_path,
             _h: PhantomData,
             _u: PhantomData,
+            _v: PhantomData,
+            _w: PhantomData,
         }
     }
 }

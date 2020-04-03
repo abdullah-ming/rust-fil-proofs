@@ -37,7 +37,7 @@ pub struct StackedCircuit<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hash
     comm_c: Option<<Tree::Hasher as Hasher>::Domain>,
 
     // one proof per challenge
-    proofs: Vec<Proof<Tree::Hasher, G>>,
+    proofs: Vec<Proof<Tree, G>>,
 }
 
 impl<'a, Tree: MerkleTreeTrait, G: Hasher> CircuitComponent for StackedCircuit<'a, Tree, G> {
@@ -54,7 +54,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedCircuit<'a
         comm_r: Option<<Tree::Hasher as Hasher>::Domain>,
         comm_r_last: Option<<Tree::Hasher as Hasher>::Domain>,
         comm_c: Option<<Tree::Hasher as Hasher>::Domain>,
-        proofs: Vec<Proof<Tree::Hasher, G>>,
+        proofs: Vec<Proof<Tree, G>>,
     ) -> Result<(), SynthesisError>
     where
         CS: ConstraintSystem<Bls12>,
@@ -175,7 +175,7 @@ impl<C: Circuit<Bls12>, P: ParameterSetMetadata, Tree: MerkleTreeTrait, G: Hashe
     fn cache_prefix() -> String {
         format!(
             "stacked-proof-of-replication-{}-{}",
-            Tree::Hasher::name(),
+            Tree::display(),
             G::name()
         )
     }

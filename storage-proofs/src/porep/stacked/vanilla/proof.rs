@@ -55,7 +55,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         layers: usize,
         _total_layers: usize,
         partition_count: usize,
-    ) -> Result<Vec<Vec<Proof<Tree::Hasher, G>>>> {
+    ) -> Result<Vec<Vec<Proof<Tree, G>>>> {
         assert!(layers > 0);
         assert_eq!(t_aux.labels.len(), layers);
 

@@ -15,12 +15,14 @@ use crate::hasher::{HashFunction, Hasher};
 use crate::merkle::MerkleTreeTrait;
 use crate::proof::ProofScheme;
 
-impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a> for StackedDrg<'c, Tree, G> {
+impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
+    for StackedDrg<'c, Tree, G>
+{
     type PublicParams = PublicParams<Tree::Hasher>;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>;
     type PrivateInputs = PrivateInputs<Tree, G>;
-    type Proof = Vec<Proof<Tree::Hasher, G>>;
+    type Proof = Vec<Proof<Tree, G>>;
     type Requirements = ChallengeRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
