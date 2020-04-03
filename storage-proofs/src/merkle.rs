@@ -911,9 +911,14 @@ impl<
 fn proof_to_single<H: Hasher, Arity: Unsigned, TargetArity: Unsigned>(
     proof: &proof::Proof<H::Domain, Arity>,
     lemma_start_index: usize,
+    sub_root: Option<H::Domain>,
 ) -> SingleProof<H, TargetArity> {
     let root = proof.root();
-    let leaf = proof.item();
+    let leaf = if sub_root.is_some() {
+        sub_root.unwrap()
+    } else {
+        proof.item()
+    };
     let path = extract_path::<H, TargetArity>(proof.lemma(), proof.path(), lemma_start_index);
 
     SingleProof::new(root, leaf, path)
@@ -946,7 +951,7 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> MerkleProofTrait for SingleProof
     fn new_from_proof(
         p: &proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
     ) -> Result<Self> {
-        Ok(proof_to_single(p, 1))
+        Ok(proof_to_single(p, 1, None))
     }
 
     fn verify(&self) -> bool {
@@ -1017,8 +1022,8 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
         let base_p = p.sub_tree_proof.as_ref().unwrap();
 
         // Generate SubProof
-        let base_proof = proof_to_single(base_p, 1);
-        let sub_proof = proof_to_single(p, 0);
+        let base_proof = proof_to_single(base_p, 1, None);
+        let sub_proof = proof_to_single(p, 0, Some(base_p.root()));
 
         Ok(SubProof::new(base_proof, sub_proof))
     }
@@ -1048,6 +1053,7 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
             self.root(),
             &expected_root
         );
+
         self.root() == &expected_root
     }
 
@@ -1130,15 +1136,17 @@ impl<
         );
         let base_p = sub_p.sub_tree_proof.as_ref().unwrap();
 
-        let base_proof = proof_to_single::<Self::Hasher, Self::Arity, Self::Arity>(base_p, 1);
-        let sub_proof = proof_to_single::<Self::Hasher, Self::Arity, Self::SubTreeArity>(sub_p, 0);
-        let top_proof = proof_to_single::<Self::Hasher, Self::Arity, Self::TopTreeArity>(p, 0);
+        let base_proof = proof_to_single::<Self::Hasher, Self::Arity, Self::Arity>(base_p, 1, None);
+        let sub_proof = proof_to_single::<Self::Hasher, Self::Arity, Self::SubTreeArity>(sub_p, 0, Some(base_p.root()));
+        let top_proof = proof_to_single::<Self::Hasher, Self::Arity, Self::TopTreeArity>(p, 0, Some(sub_p.root()));
 
         assert!(base_proof.verify());
         assert!(sub_proof.verify());
         assert!(top_proof.verify());
 
-        Ok(TopProof::new(base_proof, sub_proof, top_proof))
+        let top = TopProof::new(base_proof, sub_proof, top_proof);
+        assert!(top.verify());
+        Ok(top)
     }
 
     fn verify(&self) -> bool {
