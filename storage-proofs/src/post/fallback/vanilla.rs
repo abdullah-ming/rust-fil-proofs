@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use anyhow::{ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
-use generic_array::typenum::{self, U8};
+use generic_array::typenum::{self, Unsigned, U8};
 use log::trace;
 use merkletree::store::StoreConfig;
 use rayon::prelude::*;
@@ -12,9 +12,8 @@ use sha2::{Digest, Sha256};
 use crate::drgraph::graph_height;
 use crate::error::Result;
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{MerkleProof, MerkleProofTrait, OctLCMerkleTree};
+use crate::merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, OctLCMerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
-use crate::porep::stacked::OCT_ARITY;
 use crate::proof::ProofScheme;
 use crate::sector::*;
 use crate::util::NODE_SIZE;
@@ -136,11 +135,11 @@ impl<H: Hasher> SectorProof<H> {
 }
 
 #[derive(Debug, Clone)]
-pub struct FallbackPoSt<'a, H>
+pub struct FallbackPoSt<'a, Tree>
 where
-    H: 'a + Hasher,
+    Tree: 'a + MerkleTreeTrait,
 {
-    _h: PhantomData<&'a H>,
+    _t: PhantomData<&'a Tree>,
 }
 
 pub fn generate_sector_challenges<T: Domain>(
@@ -217,12 +216,12 @@ pub fn generate_leaf_challenge<T: Domain>(
     Ok(challenged_range_index)
 }
 
-impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
+impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs<'a, H::Domain>;
-    type PrivateInputs = PrivateInputs<'a, H>;
-    type Proof = Proof<H>;
+    type PublicInputs = PublicInputs<'a, <Tree::Hasher as Hasher>::Domain>;
+    type PrivateInputs = PrivateInputs<'a, Tree::Hasher>;
+    type Proof = Proof<Tree::Hasher>;
     type Requirements = ChallengeRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
@@ -298,7 +297,10 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
                 let tree = &priv_sector.tree;
                 let sector_id = pub_sector.id;
                 let tree_leafs = tree.leafs();
-                let levels = StoreConfig::default_cached_above_base_layer(tree_leafs, OCT_ARITY);
+                let levels = StoreConfig::default_cached_above_base_layer(
+                    tree_leafs,
+                    Tree::Arity::to_usize(),
+                );
 
                 trace!(
                     "Generating proof for tree of len {} with leafs {}, and cached_layers {}",
@@ -320,9 +322,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
                             challenge_index,
                         )?;
 
-                        let proof =
-                            tree.gen_cached_proof(challenged_leaf_start as usize, levels)?;
-                        MerkleProof::new_from_proof(&proof)
+                        tree.gen_cached_proof(challenged_leaf_start as usize, levels)
                     })
                     .collect::<Result<Vec<_>>>()?;
 
@@ -395,8 +395,10 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
                 // comm_r_last is the root of the proof
                 let comm_r_last = inclusion_proofs[0].root();
 
-                if AsRef::<[u8]>::as_ref(&H::Function::hash2(&comm_c, comm_r_last))
-                    != AsRef::<[u8]>::as_ref(comm_r)
+                if AsRef::<[u8]>::as_ref(&<Tree::Hasher as Hasher>::Function::hash2(
+                    &comm_c,
+                    comm_r_last,
+                )) != AsRef::<[u8]>::as_ref(comm_r)
                 {
                     return Ok(false);
                 }
@@ -466,8 +468,9 @@ mod tests {
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{PedersenHasher, PoseidonHasher};
+    use crate::merkle::OctMerkleTree;
 
-    fn test_fallback_post<H: Hasher>(
+    fn test_fallback_post<H: 'static + Hasher>(
         total_sector_count: usize,
         sector_count: usize,
         partitions: usize,
@@ -546,7 +549,7 @@ mod tests {
             sectors: &priv_sectors,
         };
 
-        let proof = FallbackPoSt::<H>::prove_all_partitions(
+        let proof = FallbackPoSt::<OctMerkleTree<H>>::prove_all_partitions(
             &pub_params,
             &pub_inputs,
             &priv_inputs,
@@ -554,8 +557,12 @@ mod tests {
         )
         .expect("proving failed");
 
-        let is_valid = FallbackPoSt::<H>::verify_all_partitions(&pub_params, &pub_inputs, &proof)
-            .expect("verification failed");
+        let is_valid = FallbackPoSt::<OctMerkleTree<H>>::verify_all_partitions(
+            &pub_params,
+            &pub_inputs,
+            &proof,
+        )
+        .expect("verification failed");
 
         assert!(is_valid);
     }

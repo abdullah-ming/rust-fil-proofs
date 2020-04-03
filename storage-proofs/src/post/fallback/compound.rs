@@ -9,7 +9,7 @@ use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::error::Result;
 use crate::gadgets::por::PoRCompound;
 use crate::hasher::Hasher;
-use crate::merkle::{DiskStore, MerkleTreeWrapper};
+use crate::merkle::{DiskStore, MerkleTreeTrait, MerkleTreeWrapper};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por;
 use crate::post::fallback::{self, FallbackPoSt, FallbackPoStCircuit};
@@ -18,29 +18,28 @@ use crate::util::NODE_SIZE;
 
 use super::circuit::Sector;
 
-pub struct FallbackPoStCompound<H>
+pub struct FallbackPoStCompound<Tree>
 where
-    H: Hasher,
+    Tree: MerkleTreeTrait,
 {
-    _h: PhantomData<H>,
+    _t: PhantomData<Tree>,
 }
 
-impl<C: Circuit<Bls12>, P: ParameterSetMetadata, H: Hasher> CacheableParameters<C, P>
-    for FallbackPoStCompound<H>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheableParameters<C, P>
+    for FallbackPoStCompound<Tree>
 {
     fn cache_prefix() -> String {
-        format!("proof-of-spacetime-fallback-{}", H::name())
+        format!("proof-of-spacetime-fallback-{}", Tree::display())
     }
 }
 
-impl<'a, H> CompoundProof<'a, FallbackPoSt<'a, H>, FallbackPoStCircuit<H>>
-    for FallbackPoStCompound<H>
-where
-    H: 'static + Hasher,
+impl<'a, Tree: 'static + MerkleTreeTrait>
+    CompoundProof<'a, FallbackPoSt<'a, Tree>, FallbackPoStCircuit<Tree::Hasher>>
+    for FallbackPoStCompound<Tree>
 {
     fn generate_public_inputs(
-        pub_inputs: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
-        pub_params: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
+        pub_inputs: &<FallbackPoSt<'a, Tree> as ProofScheme<'a>>::PublicInputs,
+        pub_params: &<FallbackPoSt<'a, Tree> as ProofScheme<'a>>::PublicParams,
         partition_k: Option<usize>,
     ) -> Result<Vec<Fr>> {
         let mut inputs = Vec::new();
@@ -80,16 +79,10 @@ where
                     commitment: None,
                     challenge: challenged_leaf_start as usize,
                 };
-                let por_inputs = PoRCompound::<
-                    MerkleTreeWrapper<
-                        H,
-                        DiskStore<H::Domain>,
-                        typenum::U8,
-                        typenum::U0,
-                        typenum::U0,
-                    >,
-                >::generate_public_inputs(
-                    &por_pub_inputs, &por_pub_params, partition_k
+                let por_inputs = PoRCompound::<Tree>::generate_public_inputs(
+                    &por_pub_inputs,
+                    &por_pub_params,
+                    partition_k,
                 )?;
 
                 inputs.extend(por_inputs);
@@ -108,12 +101,12 @@ where
     }
 
     fn circuit(
-        pub_in: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
-        _priv_in: <FallbackPoStCircuit<H> as CircuitComponent>::ComponentPrivateInputs,
-        vanilla_proof: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::Proof,
-        pub_params: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
+        pub_in: &<FallbackPoSt<'a, Tree> as ProofScheme<'a>>::PublicInputs,
+        _priv_in: <FallbackPoStCircuit<Tree::Hasher> as CircuitComponent>::ComponentPrivateInputs,
+        vanilla_proof: &<FallbackPoSt<'a, Tree> as ProofScheme<'a>>::Proof,
+        pub_params: &<FallbackPoSt<'a, Tree> as ProofScheme<'a>>::PublicParams,
         partition_k: Option<usize>,
-    ) -> Result<FallbackPoStCircuit<H>> {
+    ) -> Result<FallbackPoStCircuit<Tree::Hasher>> {
         let num_sectors_per_chunk = pub_params.sector_count;
         ensure!(
             pub_params.sector_count == vanilla_proof.sectors.len(),
@@ -151,8 +144,8 @@ where
     }
 
     fn blank_circuit(
-        pub_params: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
-    ) -> FallbackPoStCircuit<H> {
+        pub_params: &<FallbackPoSt<'a, Tree> as ProofScheme<'a>>::PublicParams,
+    ) -> FallbackPoStCircuit<Tree::Hasher> {
         let sectors = (0..pub_params.sector_count)
             .map(|_| Sector::blank_circuit(pub_params))
             .collect();
@@ -179,6 +172,7 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
+    use crate::merkle::OctMerkleTree;
     use crate::porep::stacked::OCT_ARITY;
     use crate::post::fallback;
 
@@ -290,7 +284,8 @@ mod tests {
             });
         }
 
-        let pub_params = FallbackPoStCompound::<H>::setup(&setup_params).expect("setup failed");
+        let pub_params =
+            FallbackPoStCompound::<OctMerkleTree<H>>::setup(&setup_params).expect("setup failed");
 
         let pub_inputs = PublicInputs {
             randomness,
@@ -309,7 +304,7 @@ mod tests {
                 FallbackPoStCompound::circuit_for_test_all(&pub_params, &pub_inputs, &priv_inputs)
                     .unwrap();
             let blank_circuit =
-                FallbackPoStCompound::<H>::blank_circuit(&pub_params.vanilla_params);
+                FallbackPoStCompound::<OctMerkleTree<H>>::blank_circuit(&pub_params.vanilla_params);
 
             let mut cs_blank = MetricCS::new();
             blank_circuit
@@ -352,9 +347,11 @@ mod tests {
             }
         }
 
-        let blank_groth_params =
-            FallbackPoStCompound::<H>::groth_params(Some(rng), &pub_params.vanilla_params)
-                .expect("failed to generate groth params");
+        let blank_groth_params = FallbackPoStCompound::<OctMerkleTree<H>>::groth_params(
+            Some(rng),
+            &pub_params.vanilla_params,
+        )
+        .expect("failed to generate groth params");
 
         let proof = FallbackPoStCompound::prove(
             &pub_params,

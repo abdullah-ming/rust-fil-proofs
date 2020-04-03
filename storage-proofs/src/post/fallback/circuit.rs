@@ -194,6 +194,7 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::gadgets::TestConstraintSystem;
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
+    use crate::merkle::OctMerkleTree;
     use crate::porep::stacked::OCT_ARITY;
     use crate::post::fallback::{
         self, FallbackPoSt, FallbackPoStCompound, PrivateInputs, PrivateSector, PublicInputs,
@@ -238,10 +239,10 @@ mod tests {
             sector_count: 5,
         };
 
-        let pp = FallbackPoSt::<PoseidonHasher>::setup(&params).unwrap();
+        let pp = FallbackPoSt::<OctMerkleTree<PoseidonHasher>>::setup(&params).unwrap();
 
         let mut cs = BenchCS::<Bls12>::new();
-        FallbackPoStCompound::<PoseidonHasher>::blank_circuit(&pp)
+        FallbackPoStCompound::<OctMerkleTree<PoseidonHasher>>::blank_circuit(&pp)
             .synthesize(&mut cs)
             .unwrap();
 
@@ -331,7 +332,7 @@ mod tests {
             sectors: &priv_sectors,
         };
 
-        let proofs = FallbackPoSt::<H>::prove_all_partitions(
+        let proofs = FallbackPoSt::<OctMerkleTree<H>>::prove_all_partitions(
             &pub_params,
             &pub_inputs,
             &priv_inputs,
@@ -340,8 +341,12 @@ mod tests {
         .expect("proving failed");
         assert_eq!(proofs.len(), partitions);
 
-        let is_valid = FallbackPoSt::<H>::verify_all_partitions(&pub_params, &pub_inputs, &proofs)
-            .expect("verification failed");
+        let is_valid = FallbackPoSt::<OctMerkleTree<H>>::verify_all_partitions(
+            &pub_params,
+            &pub_inputs,
+            &proofs,
+        )
+        .expect("verification failed");
         assert!(is_valid);
 
         // actual circuit test
@@ -424,12 +429,13 @@ mod tests {
             );
             assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
-            let generated_inputs = FallbackPoStCompound::<H>::generate_public_inputs(
-                &pub_inputs,
-                &pub_params,
-                Some(j),
-            )
-            .unwrap();
+            let generated_inputs =
+                FallbackPoStCompound::<OctMerkleTree<H>>::generate_public_inputs(
+                    &pub_inputs,
+                    &pub_params,
+                    Some(j),
+                )
+                .unwrap();
             let expected_inputs = cs.get_inputs();
 
             for ((input, label), generated_input) in
