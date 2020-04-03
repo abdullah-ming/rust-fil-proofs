@@ -45,8 +45,8 @@ pub type DiskStore<E> = merkletree::store::DiskStore<E>;
 
 pub type MerkleStore<T> = DiskStore<T>;
 
-type DiskTree<H, U, V, W> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U, V, W>;
-type LCTree<H, U, V, W> =
+pub type DiskTree<H, U, V, W> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U, V, W>;
+pub type LCTree<H, U, V, W> =
     MerkleTreeWrapper<H, LevelCacheStore<<H as Hasher>::Domain, std::fs::File>, U, V, W>;
 
 pub type MerkleTree<H, U> = DiskTree<H, U, U0, U0>;
@@ -1318,37 +1318,43 @@ pub fn create_lcmerkle_tree<H: Hasher, BaseTreeArity: 'static + PoseidonArity>(
 
 /// Open an existing level cache merkle tree, given the specified
 /// config and replica_path.
-pub fn open_lcmerkle_tree<H: Hasher, BaseTreeArity: 'static + PoseidonArity>(
+pub fn open_lcmerkle_tree<
+    H: Hasher,
+    U: 'static + PoseidonArity,
+    V: 'static + PoseidonArity,
+    W: 'static + PoseidonArity,
+>(
     config: StoreConfig,
     size: usize,
     replica_path: &PathBuf,
-) -> Result<LCMerkleTree<H, BaseTreeArity>> {
+) -> Result<LCTree<H, U, V, W>> {
+    todo!("handle V, W > 0");
     trace!("open_lcmerkle_tree called with size {}", size);
     trace!(
         "is_merkle_tree_size_valid({}, arity {}) = {}",
         size,
-        BaseTreeArity::to_usize(),
-        is_merkle_tree_size_valid(size, BaseTreeArity::to_usize())
+        U::to_usize(),
+        is_merkle_tree_size_valid(size, U::to_usize())
     );
     ensure!(
-        is_merkle_tree_size_valid(size, BaseTreeArity::to_usize()),
+        is_merkle_tree_size_valid(size, U::to_usize()),
         "Invalid merkle tree size given the arity"
     );
 
-    let tree_size = get_merkle_tree_len(size, BaseTreeArity::to_usize())?;
+    let tree_size = get_merkle_tree_len(size, U::to_usize())?;
     let tree_store: LevelCacheStore<H::Domain, _> = LevelCacheStore::new_from_disk_with_reader(
         tree_size,
-        BaseTreeArity::to_usize(),
+        U::to_usize(),
         &config,
         ExternalReader::new_from_path(replica_path)?,
     )?;
 
     ensure!(
-        size == get_merkle_tree_leafs(tree_size, BaseTreeArity::to_usize()),
+        size == get_merkle_tree_leafs(tree_size, U::to_usize()),
         "Inconsistent lcmerkle tree"
     );
 
-    LCMerkleTree::from_data_store(tree_store, size)
+    LCTree::from_data_store(tree_store, size)
 }
 
 #[cfg(test)]
