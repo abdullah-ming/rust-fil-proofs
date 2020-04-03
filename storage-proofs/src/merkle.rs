@@ -228,7 +228,13 @@ impl<
     type Proof = MerkleProof<Self::Hasher, Self::Arity, Self::SubTreeArity, Self::TopTreeArity>;
 
     fn display() -> String {
-        format!("MerkleTree<{}>", U::to_usize())
+        format!(
+            "MerkleTree<{}, {}, {}, {}>",
+            H::name(),
+            U::to_usize(),
+            V::to_usize(),
+            W::to_usize()
+        )
     }
 
     fn root(&self) -> <Self::Hasher as Hasher>::Domain {
