@@ -92,7 +92,7 @@ impl<H: Hasher> Sector<H> {
     }
 }
 
-impl<H: Hasher> Circuit<Bls12> for &Sector<H> {
+impl<H: 'static + Hasher> Circuit<Bls12> for &Sector<H> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let Sector {
             comm_r,
@@ -167,7 +167,7 @@ impl<H: Hasher> CircuitComponent for FallbackPoStCircuit<H> {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<H: Hasher> Circuit<Bls12> for FallbackPoStCircuit<H> {
+impl<H: 'static + Hasher> Circuit<Bls12> for FallbackPoStCircuit<H> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         for (i, sector) in self.sectors.iter().enumerate() {
             let cs = &mut cs.namespace(|| format!("sector_{}", i));

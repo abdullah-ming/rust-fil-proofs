@@ -270,7 +270,7 @@ where
 
 impl<'a, H, G> ProofScheme<'a> for DrgPoRep<'a, H, G>
 where
-    H: 'a + Hasher,
+    H: 'static + Hasher,
     G: 'a + Graph<H> + ParameterSetMetadata,
 {
     type PublicParams = PublicParams<H, G>;
@@ -471,7 +471,7 @@ where
 
 impl<'a, H, G> PoRep<'a, H, H> for DrgPoRep<'a, H, G>
 where
-    H: 'a + Hasher,
+    H: 'static + Hasher,
     G::Key: AsRef<<H as Hasher>::Domain>,
     G: 'a + Graph<H> + ParameterSetMetadata + Sync + Send,
 {

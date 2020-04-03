@@ -61,7 +61,7 @@ pub struct DrgPoRepCircuit<'a, H: Hasher> {
     pub _h: PhantomData<&'a H>,
 }
 
-impl<'a, H: Hasher> DrgPoRepCircuit<'a, H> {
+impl<'a, H: 'static + Hasher> DrgPoRepCircuit<'a, H> {
     #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     pub fn synthesize<CS>(
         mut cs: CS,
@@ -129,7 +129,7 @@ impl<'a, H: Hasher> CircuitComponent for DrgPoRepCircuit<'a, H> {
 ///
 /// Total = 2 + replica_parents.len()
 ///
-impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
+impl<'a, H: 'static + Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let replica_id = self.replica_id;
         let replica_root = self.replica_root;

@@ -5,6 +5,7 @@ use paired::bls12_381::{Bls12, Fr};
 use super::hash::hash_single_column;
 
 use crate::hasher::Hasher;
+use crate::merkle::MerkleTreeTrait;
 use crate::porep::stacked::{Column as VanillaColumn, PublicParams};
 
 #[derive(Debug, Clone)]
@@ -26,7 +27,7 @@ impl<H: Hasher> From<VanillaColumn<H>> for Column {
 
 impl Column {
     /// Create an empty `Column`, used in `blank_circuit`s.
-    pub fn empty<H: Hasher>(params: &PublicParams<H>) -> Self {
+    pub fn empty<Tree: MerkleTreeTrait>(params: &PublicParams<Tree>) -> Self {
         Column {
             index: None,
             rows: vec![None; params.layer_challenges.layers()],

@@ -148,7 +148,7 @@ where
     }
 }
 
-impl<'a, H: Hasher> RationalPoStCircuit<H> {
+impl<'a, H: 'static + Hasher> RationalPoStCircuit<H> {
     #[allow(clippy::type_complexity)]
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         cs: &mut CS,

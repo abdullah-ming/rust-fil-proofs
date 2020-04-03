@@ -23,7 +23,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tre
     );
 
     fn replicate(
-        pp: &'a PublicParams<Tree::Hasher>,
+        pp: &'a PublicParams<Tree>,
         replica_id: &<Tree::Hasher as Hasher>::Domain,
         data: Data<'a>,
         data_tree: Option<BinaryMerkleTree<G>>,
@@ -44,7 +44,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tre
     }
 
     fn extract_all<'b>(
-        pp: &'b PublicParams<Tree::Hasher>,
+        pp: &'b PublicParams<Tree>,
         replica_id: &'b <Tree::Hasher as Hasher>::Domain,
         data: &'b [u8],
         config: Option<StoreConfig>,
@@ -63,7 +63,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tre
     }
 
     fn extract(
-        _pp: &PublicParams<Tree::Hasher>,
+        _pp: &PublicParams<Tree>,
         _replica_id: &<Tree::Hasher as Hasher>::Domain,
         _data: &[u8],
         _node: usize,

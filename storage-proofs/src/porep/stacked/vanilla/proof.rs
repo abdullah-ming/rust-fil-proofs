@@ -785,7 +785,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
     /// Phase1 of replication.
     pub fn replicate_phase1(
-        pp: &'a PublicParams<Tree::Hasher>,
+        pp: &'a PublicParams<Tree>,
         replica_id: &<Tree::Hasher as Hasher>::Domain,
         config: StoreConfig,
     ) -> Result<Labels<Tree>> {
@@ -802,7 +802,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     /// Phase2 of replication.
     #[allow(clippy::type_complexity)]
     pub fn replicate_phase2(
-        pp: &'a PublicParams<Tree::Hasher>,
+        pp: &'a PublicParams<Tree>,
         labels: Labels<Tree>,
         data: Data<'a>,
         data_tree: BinaryMerkleTree<G>,

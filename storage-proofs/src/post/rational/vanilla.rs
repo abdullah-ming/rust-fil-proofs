@@ -298,7 +298,7 @@ mod tests {
     };
     use crate::merkle::MerkleProof;
 
-    fn test_rational_post<H: Hasher>() {
+    fn test_rational_post<H: 'static + Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 64;
@@ -425,7 +425,7 @@ mod tests {
         // )
     }
 
-    fn test_rational_post_validates<H: Hasher>() {
+    fn test_rational_post_validates<H: 'static + Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 64;
@@ -502,7 +502,7 @@ mod tests {
         test_rational_post_validates::<PoseidonHasher>();
     }
 
-    fn test_rational_post_validates_challenge_identity<H: Hasher>() {
+    fn test_rational_post_validates_challenge_identity<H: 'static + Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 64;

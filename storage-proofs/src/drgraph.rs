@@ -344,7 +344,7 @@ mod tests {
         graph_bucket::<PedersenHasher>();
     }
 
-    fn gen_proof<H: Hasher, U: 'static + PoseidonArity>(config: Option<StoreConfig>) {
+    fn gen_proof<H: 'static + Hasher, U: 'static + PoseidonArity>(config: Option<StoreConfig>) {
         let leafs = 64;
         let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed()).unwrap();
         let data = vec![2u8; NODE_SIZE * leafs];

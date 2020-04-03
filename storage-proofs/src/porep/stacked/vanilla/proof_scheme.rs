@@ -18,7 +18,7 @@ use crate::proof::ProofScheme;
 impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
     for StackedDrg<'c, Tree, G>
 {
-    type PublicParams = PublicParams<Tree::Hasher>;
+    type PublicParams = PublicParams<Tree>;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>;
     type PrivateInputs = PrivateInputs<Tree, G>;
@@ -147,7 +147,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
     }
 
     fn satisfies_requirements(
-        public_params: &PublicParams<Tree::Hasher>,
+        public_params: &PublicParams<Tree>,
         requirements: &ChallengeRequirements,
         partitions: usize,
     ) -> bool {

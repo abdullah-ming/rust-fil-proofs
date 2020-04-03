@@ -12,7 +12,7 @@ use crate::drgraph::Graph;
 use crate::gadgets::por::PoRCircuit;
 use crate::gadgets::variables::Root;
 use crate::hasher::{Hasher, PoseidonArity};
-use crate::merkle::{DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper};
+use crate::merkle::{DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper, Store};
 use crate::porep::stacked::{
     Proof as VanillaProof, PublicParams, ReplicaColumnProof as VanillaReplicaColumnProof,
 };
@@ -29,9 +29,9 @@ pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
     _t: PhantomData<Tree>,
 }
 
-impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
+impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty(params: &PublicParams<Tree::Hasher>) -> Self {
+    pub fn empty(params: &PublicParams<Tree>) -> Self {
         let layers = params.layer_challenges.layers();
 
         let mut labeling_proofs = Vec::with_capacity(layers);
@@ -165,6 +165,7 @@ where
 
 impl<H: Hasher, U, V, W> InclusionPath<H, U, V, W>
 where
+    H: 'static,
     U: 'static + PoseidonArity,
     V: 'static + PoseidonArity,
     W: 'static + PoseidonArity,
@@ -240,14 +241,18 @@ pub struct ReplicaColumnProof<H: Hasher, U: PoseidonArity, V: PoseidonArity, W: 
 }
 
 impl<
-        H: Hasher,
+        H: 'static + Hasher,
         U: 'static + PoseidonArity,
         V: 'static + PoseidonArity,
         W: 'static + PoseidonArity,
     > ReplicaColumnProof<H, U, V, W>
 {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty(params: &PublicParams<H>) -> Self {
+    pub fn empty<S, Tree>(params: &PublicParams<Tree>) -> Self
+    where
+        S: Store<H::Domain>,
+        Tree: MerkleTreeTrait<Hasher = H, Store = S, Arity = U, SubTreeArity = V, TopTreeArity = W>,
+    {
         ReplicaColumnProof {
             c_x: ColumnProof::empty(params),
             drg_parents: vec![ColumnProof::empty(params); params.graph.base_graph().degree()],

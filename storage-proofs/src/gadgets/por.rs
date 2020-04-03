@@ -317,7 +317,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
         let mut inputs = Vec::new();
 
         let get_challenge_index = |challenge: usize, arity: usize, height: usize| {
-            let mut n = challenge;
+            let n = challenge;
             assert_eq!(1, arity.count_ones());
 
             let mut leaves = 1;

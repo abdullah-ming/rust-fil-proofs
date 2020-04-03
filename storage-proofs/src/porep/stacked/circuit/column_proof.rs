@@ -6,7 +6,7 @@ use super::{column::Column, params::InclusionPath};
 
 use crate::gadgets::constraint;
 use crate::hasher::{Hasher, PoseidonArity};
-use crate::merkle::MerkleProofTrait;
+use crate::merkle::{MerkleProofTrait, MerkleTreeTrait, Store};
 use crate::porep::stacked::{ColumnProof as VanillaColumnProof, PublicParams};
 
 #[derive(Debug, Clone)]
@@ -16,14 +16,19 @@ pub struct ColumnProof<H: Hasher, U: PoseidonArity, V: PoseidonArity, W: Poseido
 }
 
 impl<
-        H: Hasher,
+        H: 'static + Hasher,
         U: 'static + PoseidonArity,
         V: 'static + PoseidonArity,
         W: 'static + PoseidonArity,
     > ColumnProof<H, U, V, W>
 {
     /// Create an empty `ColumnProof`, used in `blank_circuit`s.
-    pub fn empty(params: &PublicParams<H>) -> Self {
+    pub fn empty<
+        S: Store<H::Domain>,
+        Tree: MerkleTreeTrait<Hasher = H, Store = S, Arity = U, SubTreeArity = V, TopTreeArity = W>,
+    >(
+        params: &PublicParams<Tree>,
+    ) -> Self {
         ColumnProof {
             column: Column::empty(params),
             inclusion_path: InclusionPath::empty(&params.graph),

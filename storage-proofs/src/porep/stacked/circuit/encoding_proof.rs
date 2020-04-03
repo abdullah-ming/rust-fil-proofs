@@ -5,6 +5,7 @@ use paired::bls12_381::{Bls12, Fr};
 use crate::fr32::fr_into_bytes;
 use crate::gadgets::{constraint, encode::encode, uint64};
 use crate::hasher::Hasher;
+use crate::merkle::MerkleTreeTrait;
 use crate::porep::stacked::{EncodingProof as VanillaEncodingProof, PublicParams, TOTAL_PARENTS};
 use crate::util::bytes_into_boolean_vec_be;
 
@@ -18,7 +19,7 @@ pub struct EncodingProof {
 
 impl EncodingProof {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty<H: Hasher>(_params: &PublicParams<H>) -> Self {
+    pub fn empty<Tree: MerkleTreeTrait>(_params: &PublicParams<Tree>) -> Self {
         EncodingProof {
             node: None,
             parents: vec![None; TOTAL_PARENTS],

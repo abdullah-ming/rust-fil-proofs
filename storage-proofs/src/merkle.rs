@@ -73,7 +73,7 @@ pub trait MerkleTreeTrait: Send + Sync + std::fmt::Debug {
     type Arity: 'static + PoseidonArity;
     type SubTreeArity: 'static + PoseidonArity;
     type TopTreeArity: 'static + PoseidonArity;
-    type Hasher: Hasher;
+    type Hasher: 'static + Hasher;
     type Store: Store<<Self::Hasher as Hasher>::Domain>;
     type Proof: MerkleProofTrait<
         Hasher = Self::Hasher,
@@ -213,7 +213,7 @@ pub fn compound_tree_height<A: Unsigned, B: Unsigned, C: Unsigned>(leaves: usize
 }
 
 impl<
-        H: Hasher,
+        H: 'static + Hasher,
         S: Store<<H as Hasher>::Domain>,
         U: 'static + PoseidonArity,
         V: 'static + PoseidonArity,
@@ -1469,7 +1469,7 @@ mod tests {
     use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
     use crate::merkle::MerkleProofTrait;
 
-    fn merklepath<H: Hasher, BaseTreeArity: 'static + PoseidonArity>() {
+    fn merklepath<H: 'static + Hasher, BaseTreeArity: 'static + PoseidonArity>() {
         let leafs = 64;
         let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed()).unwrap();
         let mut rng = rand::thread_rng();

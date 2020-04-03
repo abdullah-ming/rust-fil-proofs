@@ -32,7 +32,7 @@ impl<'a, H: Hasher> CircuitComponent for RationalPoStCircuit<H> {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<'a, H: Hasher> Circuit<Bls12> for RationalPoStCircuit<H> {
+impl<'a, H: 'static + Hasher> Circuit<Bls12> for RationalPoStCircuit<H> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let comm_rs = self.comm_rs;
         let comm_cs = self.comm_cs;

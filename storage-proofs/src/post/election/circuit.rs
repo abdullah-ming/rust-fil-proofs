@@ -37,7 +37,7 @@ impl<'a, H: Hasher> CircuitComponent for ElectionPoStCircuit<H> {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<'a, H: Hasher> Circuit<Bls12> for ElectionPoStCircuit<H> {
+impl<'a, H: 'static + Hasher> Circuit<Bls12> for ElectionPoStCircuit<H> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let comm_r = self.comm_r;
         let comm_c = self.comm_c;

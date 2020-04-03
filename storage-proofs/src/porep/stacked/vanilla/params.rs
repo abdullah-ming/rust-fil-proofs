@@ -42,38 +42,52 @@ pub struct SetupParams {
     pub layer_challenges: LayerChallenges,
 }
 
-#[derive(Debug, Clone)]
-pub struct PublicParams<H>
+#[derive(Debug)]
+pub struct PublicParams<Tree>
 where
-    H: 'static + Hasher,
+    Tree: 'static + MerkleTreeTrait,
 {
-    pub graph: StackedBucketGraph<H>,
+    pub graph: StackedBucketGraph<Tree::Hasher>,
     pub layer_challenges: LayerChallenges,
-    _h: PhantomData<H>,
+    _t: PhantomData<Tree>,
 }
 
-impl<H> PublicParams<H>
+impl<Tree> Clone for PublicParams<Tree>
 where
-    H: Hasher,
+    Tree: MerkleTreeTrait,
 {
-    pub fn new(graph: StackedBucketGraph<H>, layer_challenges: LayerChallenges) -> Self {
-        PublicParams {
-            graph,
-            layer_challenges,
-            _h: PhantomData,
+    fn clone(&self) -> Self {
+        Self {
+            graph: self.graph.clone(),
+            layer_challenges: self.layer_challenges.clone(),
+            _t: Default::default(),
         }
     }
 }
 
-impl<H> ParameterSetMetadata for PublicParams<H>
+impl<Tree> PublicParams<Tree>
 where
-    H: Hasher,
+    Tree: MerkleTreeTrait,
+{
+    pub fn new(graph: StackedBucketGraph<Tree::Hasher>, layer_challenges: LayerChallenges) -> Self {
+        PublicParams {
+            graph,
+            layer_challenges,
+            _t: PhantomData,
+        }
+    }
+}
+
+impl<Tree> ParameterSetMetadata for PublicParams<Tree>
+where
+    Tree: MerkleTreeTrait,
 {
     fn identifier(&self) -> String {
         format!(
-            "layered_drgporep::PublicParams{{ graph: {}, challenges: {:?} }}",
+            "layered_drgporep::PublicParams{{ graph: {}, challenges: {:?}, tree: {} }}",
             self.graph.identifier(),
             self.layer_challenges,
+            Tree::display()
         )
     }
 
@@ -82,11 +96,11 @@ where
     }
 }
 
-impl<'a, H> From<&'a PublicParams<H>> for PublicParams<H>
+impl<'a, Tree> From<&'a PublicParams<Tree>> for PublicParams<Tree>
 where
-    H: Hasher,
+    Tree: MerkleTreeTrait,
 {
-    fn from(other: &PublicParams<H>) -> PublicParams<H> {
+    fn from(other: &PublicParams<Tree>) -> PublicParams<Tree> {
         PublicParams::new(other.graph.clone(), other.layer_challenges.clone())
     }
 }
@@ -176,7 +190,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
     /// Verify the full proof.
     pub fn verify(
         &self,
-        pub_params: &PublicParams<Tree::Hasher>,
+        pub_params: &PublicParams<Tree>,
         pub_inputs: &PublicInputs<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>,
         challenge: usize,
         graph: &StackedBucketGraph<Tree::Hasher>,
