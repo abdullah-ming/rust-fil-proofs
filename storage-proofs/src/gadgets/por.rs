@@ -14,7 +14,7 @@ use crate::gadgets::constraint;
 use crate::gadgets::insertion::insert;
 use crate::gadgets::variables::Root;
 use crate::hasher::{HashFunction, Hasher, PoseidonArity};
-use crate::merkle::{compound_tree_height, MerkleProofTrait, MerkleTreeTrait};
+use crate::merkle::{compound_path_length, MerkleProofTrait, MerkleTreeTrait};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por::PoR;
 use crate::proof::ProofScheme;
@@ -145,7 +145,6 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> SubPath<H, Arity> {
             let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
 
             let mut index_bits = Vec::with_capacity(index_bit_count);
-            dbg!(index_bit_count);
 
             for i in 0..index_bit_count {
                 let bit = AllocatedBit::alloc(cs.namespace(|| format!("index bit {}", i)), {
@@ -330,7 +329,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
             n
         };
 
-        let height = compound_tree_height::<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>(
+        let height = compound_path_length::<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>(
             pub_params.leaves,
         );
         dbg!(height);
@@ -344,6 +343,16 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
                 get_challenge_index(pub_inputs.challenge, Tree::Arity::to_usize(), height - 2);
             let top_challenge =
                 get_challenge_index(sub_challenge, Tree::SubTreeArity::to_usize(), height - 1);
+
+            dbg!(
+                top_challenge,
+                top_leaves,
+                sub_challenge,
+                sub_leaves,
+                base_challenge,
+                base_leaves,
+                pub_inputs.challenge
+            );
 
             {
                 let base_bits =
@@ -772,7 +781,7 @@ mod tests {
     #[test]
     fn test_por_circuit_poseidon_top_8_4_2() {
         test_por_circuit::<TestTree3<PoseidonHasher, typenum::U8, typenum::U4, typenum::U2>>(
-            5, 1_137,
+            5, 1_850,
         );
     }
 
@@ -807,10 +816,11 @@ mod tests {
             leaves *= top_arity;
         }
 
-        for i in 0..leaves {
-            // -- Basic Setup
+        // -- Basic Setup
+        let (data, tree) = generate_tree::<Tree, _>(rng, leaves);
 
-            let (data, tree) = generate_tree::<Tree, _>(rng, leaves);
+        for i in 0..leaves {
+            println!("challenge: {}, ({})", i, leaves);
 
             // -- PoR
             let pub_params = por::PublicParams {
