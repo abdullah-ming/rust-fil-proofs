@@ -1,8 +1,8 @@
 use anyhow::ensure;
+use generic_array::typenum::Unsigned;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
-use crate::drgraph::graph_height;
 use crate::error::*;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProofTrait, MerkleTreeTrait};
@@ -126,10 +126,16 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for PoR<Tree> {
                 None => true,
             };
 
-            let expected_path_length = graph_height::<Tree::Arity>(pub_params.leaves) - 1;
+            let expected_path_length = proof.proof.expected_len(pub_params.leaves);
             let path_length_match = expected_path_length == proof.proof.path().len();
 
             if !(commitments_match && path_length_match) {
+                dbg!(
+                    commitments_match,
+                    path_length_match,
+                    expected_path_length,
+                    proof.proof.path().len()
+                );
                 return Ok(false);
             }
         }

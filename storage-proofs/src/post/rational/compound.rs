@@ -35,7 +35,7 @@ impl<C: Circuit<Bls12>, P: ParameterSetMetadata, H: Hasher> CacheableParameters<
 impl<'a, H> CompoundProof<'a, RationalPoSt<'a, H>, RationalPoStCircuit<H>>
     for RationalPoStCompound<H>
 where
-    H: 'a + Hasher,
+    H: 'static + Hasher,
 {
     fn generate_public_inputs(
         pub_in: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
@@ -202,7 +202,7 @@ mod tests {
         rational_post_test_compound::<PoseidonHasher>();
     }
 
-    fn rational_post_test_compound<H: Hasher>() {
+    fn rational_post_test_compound<H: 'static + Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 32;

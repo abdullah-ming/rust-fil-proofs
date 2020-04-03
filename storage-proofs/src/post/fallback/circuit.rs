@@ -248,7 +248,7 @@ mod tests {
         assert_eq!(cs.num_constraints(), 285_180);
     }
 
-    fn fallback_post<H: Hasher>(
+    fn fallback_post<H: 'static + Hasher>(
         total_sector_count: usize,
         sector_count: usize,
         partitions: usize,

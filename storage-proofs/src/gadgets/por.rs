@@ -13,8 +13,8 @@ use crate::error::Result;
 use crate::gadgets::constraint;
 use crate::gadgets::insertion::insert;
 use crate::gadgets::variables::Root;
-use crate::hasher::{HashFunction, Hasher};
-use crate::merkle::{MerkleProofTrait, MerkleTreeTrait};
+use crate::hasher::{HashFunction, Hasher, PoseidonArity};
+use crate::merkle::{compound_tree_height, MerkleProofTrait, MerkleTreeTrait};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por::PoR;
 use crate::proof::ProofScheme;
@@ -31,10 +31,201 @@ use crate::proof::ProofScheme;
 pub struct PoRCircuit<Tree: MerkleTreeTrait> {
     value: Root<Bls12>,
     #[allow(clippy::type_complexity)]
-    auth_path: Vec<(Vec<Option<Fr>>, Option<usize>)>,
+    auth_path: AuthPath<Tree>,
     root: Root<Bls12>,
     private: bool,
     _tree: PhantomData<Tree>,
+}
+
+#[derive(Debug, Clone)]
+struct AuthPath<Tree: MerkleTreeTrait> {
+    base: SubPath<Tree::Hasher, Tree::Arity>,
+    sub: SubPath<Tree::Hasher, Tree::SubTreeArity>,
+    top: SubPath<Tree::Hasher, Tree::TopTreeArity>,
+    _t: PhantomData<Tree>,
+}
+
+impl<Tree: MerkleTreeTrait> From<Vec<(Vec<Option<Fr>>, Option<usize>)>> for AuthPath<Tree> {
+    fn from(mut base_opts: Vec<(Vec<Option<Fr>>, Option<usize>)>) -> Self {
+        let has_top = Tree::TopTreeArity::to_usize() > 0;
+        let has_sub = Tree::SubTreeArity::to_usize() > 0;
+        let len = base_opts.len();
+
+        let x = if has_top {
+            2
+        } else if has_sub {
+            1
+        } else {
+            0
+        };
+        let mut opts = base_opts.split_off(len - x);
+
+        let base = base_opts
+            .into_iter()
+            .map(|(hashes, index)| PathElement {
+                hashes,
+                index,
+                _a: Default::default(),
+                _h: Default::default(),
+            })
+            .collect();
+
+        let top = if has_top {
+            let (hashes, index) = opts.pop().unwrap();
+            vec![PathElement {
+                hashes,
+                index,
+                _a: Default::default(),
+                _h: Default::default(),
+            }]
+        } else {
+            Vec::new()
+        };
+
+        let sub = if has_sub {
+            let (hashes, index) = opts.pop().unwrap();
+            vec![PathElement {
+                hashes,
+                index,
+                _a: Default::default(),
+                _h: Default::default(),
+            }]
+        } else {
+            Vec::new()
+        };
+
+        assert!(opts.is_empty());
+
+        AuthPath {
+            base: SubPath { path: base },
+            sub: SubPath { path: sub },
+            top: SubPath { path: top },
+            _t: Default::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct SubPath<H: Hasher, Arity: 'static + PoseidonArity> {
+    path: Vec<PathElement<H, Arity>>,
+}
+
+#[derive(Debug, Clone)]
+struct PathElement<H: Hasher, Arity: 'static + PoseidonArity> {
+    hashes: Vec<Option<Fr>>,
+    index: Option<usize>,
+    _a: PhantomData<Arity>,
+    _h: PhantomData<H>,
+}
+
+impl<H: Hasher, Arity: 'static + PoseidonArity> SubPath<H, Arity> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(
+        self,
+        mut cs: CS,
+        mut cur: num::AllocatedNum<Bls12>,
+    ) -> Result<num::AllocatedNum<Bls12>, SynthesisError> {
+        let arity = Arity::to_usize();
+        dbg!("synthesize", arity);
+
+        if arity == 0 {
+            // Nothing to do here.
+            assert!(self.path.is_empty());
+            return Ok(cur);
+        }
+
+        assert_eq!(1, arity.count_ones(), "arity must be a power of two");
+        let index_bit_count = arity.trailing_zeros() as usize;
+
+        let mut auth_path_bits = Vec::with_capacity(self.path.len());
+
+        for (i, path) in self.path.into_iter().enumerate() {
+            let elements = path.hashes;
+            let indexes = path.index;
+
+            let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
+
+            let mut index_bits = Vec::with_capacity(index_bit_count);
+            dbg!(index_bit_count);
+
+            for i in 0..index_bit_count {
+                let bit = AllocatedBit::alloc(cs.namespace(|| format!("index bit {}", i)), {
+                    indexes.map(|index| ((index >> i) & 1) == 1)
+                })?;
+
+                index_bits.push(Boolean::from(bit));
+            }
+
+            auth_path_bits.extend_from_slice(&index_bits);
+
+            // Witness the authentication path elements adjacent at this depth.
+            let path_elements = elements
+                .iter()
+                .enumerate()
+                .map(|(i, elt)| {
+                    num::AllocatedNum::alloc(cs.namespace(|| format!("path element {}", i)), || {
+                        elt.ok_or_else(|| SynthesisError::AssignmentMissing)
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let inserted = insert(cs, &cur, &index_bits, &path_elements)?;
+
+            // Compute the new subtree value
+            cur = H::Function::hash_multi_leaf_circuit::<Arity, _>(
+                cs.namespace(|| "computation of commitment hash"),
+                &inserted,
+                i,
+            )?;
+        }
+
+        // allocate input for is_right auth_path
+        multipack::pack_into_inputs(cs.namespace(|| "path"), &auth_path_bits)?;
+
+        Ok(cur)
+    }
+}
+
+impl<Tree: 'static + MerkleTreeTrait> AuthPath<Tree> {
+    fn blank(public_params: &<PoR<Tree> as ProofScheme<'_>>::PublicParams) -> Self {
+        let base = vec![
+            PathElement::<Tree::Hasher, Tree::Arity> {
+                hashes: vec![None; Tree::Arity::to_usize() - 1],
+                index: None,
+                _a: Default::default(),
+                _h: Default::default(),
+            };
+            graph_height::<Tree::Arity>(public_params.leaves) - 1
+        ];
+
+        let sub = if Tree::SubTreeArity::to_usize() > 0 {
+            vec![PathElement::<Tree::Hasher, Tree::SubTreeArity> {
+                hashes: vec![None; Tree::SubTreeArity::to_usize() - 1],
+                index: None,
+                _a: Default::default(),
+                _h: Default::default(),
+            }]
+        } else {
+            Vec::new()
+        };
+
+        let top = if Tree::TopTreeArity::to_usize() > 0 {
+            vec![PathElement::<Tree::Hasher, Tree::TopTreeArity> {
+                hashes: vec![None; Tree::TopTreeArity::to_usize() - 1],
+                index: None,
+                _a: Default::default(),
+                _h: Default::default(),
+            }]
+        } else {
+            Vec::new()
+        };
+
+        AuthPath {
+            base: SubPath { path: base },
+            sub: SubPath { path: sub },
+            top: SubPath { path: top },
+            _t: Default::default(),
+        }
+    }
 }
 
 impl<Tree: MerkleTreeTrait> CircuitComponent for PoRCircuit<Tree> {
@@ -49,14 +240,24 @@ pub fn challenge_into_auth_path_bits<U: typenum::Unsigned>(
     challenge: usize,
     leaves: usize,
 ) -> Vec<bool> {
-    assert_eq!(leaves.count_ones(), 1, "leaves must be a power of two");
-    let height = leaves.trailing_zeros() as usize;
+    let height = graph_height::<U>(leaves);
 
     let mut bits = Vec::new();
     let mut n = challenge;
+    let arity = U::to_usize();
+
+    assert_eq!(1, arity.count_ones());
+    let log_arity = arity.trailing_zeros() as usize;
+
     for _ in 0..height {
-        bits.push(n % 2 == 1);
-        n >>= 1;
+        // Calculate the index
+        let index = n % arity;
+        n /= arity;
+
+        // turn the index into bits
+        for i in 0..log_arity {
+            bits.push((index >> i) & 1 == 1);
+        }
     }
     bits
 }
@@ -70,7 +271,7 @@ impl<C: Circuit<Bls12>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> Cacheabl
 }
 
 // can only implment for Bls12 because por is not generic over the engine.
-impl<'a, Tree: 'a + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircuit<Tree>>
+impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircuit<Tree>>
     for PoRCompound<Tree>
 {
     fn circuit<'b>(
@@ -92,7 +293,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircuit<Tre
 
         Ok(PoRCircuit::<Tree> {
             value: Root::Val(Some(proof.data.into())),
-            auth_path: proof.proof.as_options(),
+            auth_path: proof.proof.as_options().into(),
             root,
             private,
             _tree: PhantomData,
@@ -104,10 +305,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircuit<Tre
     ) -> PoRCircuit<Tree> {
         PoRCircuit::<Tree> {
             value: Root::Val(None),
-            auth_path: vec![
-                (vec![None; Tree::Arity::to_usize() - 1], None);
-                graph_height::<Tree::Arity>(public_params.leaves) - 1
-            ],
+            auth_path: AuthPath::blank(public_params),
             root: Root::Val(None),
             private: public_params.private,
             _tree: PhantomData,
@@ -119,12 +317,94 @@ impl<'a, Tree: 'a + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircuit<Tre
         pub_params: &<PoR<Tree> as ProofScheme<'a>>::PublicParams,
         _k: Option<usize>,
     ) -> Result<Vec<Fr>> {
-        let auth_path_bits =
-            challenge_into_auth_path_bits::<Tree::Arity>(pub_inputs.challenge, pub_params.leaves);
-        let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
-
         let mut inputs = Vec::new();
-        inputs.extend(packed_auth_path);
+
+        let get_challenge_index = |challenge: usize, arity: usize, height: usize| {
+            let mut n = challenge;
+            assert_eq!(1, arity.count_ones());
+
+            for _ in 0..height {
+                n /= arity;
+                dbg!(n, arity);
+            }
+            n
+        };
+
+        let height = compound_tree_height::<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>(
+            pub_params.leaves,
+        );
+        dbg!(height);
+        if Tree::TopTreeArity::to_usize() > 0 {
+            let base_challenge = pub_inputs.challenge % Tree::Arity::to_usize();
+            let sub_challenge =
+                get_challenge_index(base_challenge, Tree::SubTreeArity::to_usize(), height - 2);
+            let top_challenge =
+                get_challenge_index(sub_challenge, Tree::TopTreeArity::to_usize(), height - 1);
+
+            let top_leaves = Tree::TopTreeArity::to_usize();
+            let sub_leaves = Tree::SubTreeArity::to_usize();
+            let base_leaves = pub_params.leaves / top_leaves / sub_leaves;
+
+            {
+                let base_bits =
+                    challenge_into_auth_path_bits::<Tree::Arity>(base_challenge, base_leaves);
+                let base_packed = multipack::compute_multipacking::<Bls12>(&base_bits);
+                inputs.extend(base_packed);
+            }
+
+            {
+                let sub_bits =
+                    challenge_into_auth_path_bits::<Tree::SubTreeArity>(sub_challenge, sub_leaves);
+                let sub_packed = multipack::compute_multipacking::<Bls12>(&sub_bits);
+                inputs.extend(sub_packed);
+            }
+
+            {
+                let top_bits =
+                    challenge_into_auth_path_bits::<Tree::TopTreeArity>(top_challenge, top_leaves);
+                let top_packed = multipack::compute_multipacking::<Bls12>(&top_bits);
+                inputs.extend(top_packed);
+            }
+        } else if Tree::SubTreeArity::to_usize() > 0 {
+            let sub_leaves = Tree::SubTreeArity::to_usize();
+            let base_leaves = pub_params.leaves / sub_leaves;
+
+            let base_challenge = pub_inputs.challenge % base_leaves;
+            let sub_challenge =
+                get_challenge_index(pub_inputs.challenge, Tree::Arity::to_usize(), height - 1);
+
+            dbg!(
+                sub_challenge,
+                sub_leaves,
+                base_challenge,
+                sub_challenge,
+                pub_inputs.challenge
+            );
+
+            {
+                let base_bits =
+                    challenge_into_auth_path_bits::<Tree::Arity>(base_challenge, base_leaves);
+                let base_packed = multipack::compute_multipacking::<Bls12>(&base_bits);
+                inputs.extend(base_packed);
+            }
+
+            {
+                let sub_bits =
+                    challenge_into_auth_path_bits::<Tree::SubTreeArity>(sub_challenge, sub_leaves);
+                let sub_packed = multipack::compute_multipacking::<Bls12>(&sub_bits);
+                inputs.extend(sub_packed);
+            }
+        } else {
+            let base_challenge = pub_inputs.challenge;
+            let base_leaves = pub_params.leaves;
+
+            {
+                let base_bits =
+                    challenge_into_auth_path_bits::<Tree::Arity>(base_challenge, base_leaves);
+                let base_packed = multipack::compute_multipacking::<Bls12>(&base_bits);
+                inputs.extend(base_packed);
+            }
+        }
 
         if let Some(commitment) = pub_inputs.commitment {
             ensure!(!pub_params.private, "Params must be public");
@@ -179,68 +459,20 @@ impl<'a, Tree: MerkleTreeTrait> Circuit<Bls12> for PoRCircuit<Tree> {
             );
         }
 
-        let log_base_arity = base_arity.trailing_zeros() as usize;
-        let log_sub_arity = sub_arity.trailing_zeros() as usize;
-        let log_top_arity = top_arity.trailing_zeros() as usize;
-
         {
             let value_num = value.allocated(cs.namespace(|| "value"))?;
-
-            let mut cur = value_num;
-
-            let mut auth_path_bits = Vec::with_capacity(auth_path.len());
+            let cur = value_num;
 
             // Ascend the merkle tree authentication path
-            for (i, (elements, indexes)) in auth_path.into_iter().enumerate() {
-                let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
 
-                let arity_for_elements = elements.len() + 1;
-                let index_bit_count = match arity_for_elements {
-                    x if x == base_arity => log_base_arity,
-                    x if x == sub_arity => log_sub_arity,
-                    x if x == top_arity => log_top_arity,
-                    _ => panic!(
-                        "wrong number of elements in inclusion proof path step: {}",
-                        elements.len()
-                    ),
-                };
+            // base tree
+            let cur = auth_path.base.synthesize(cs.namespace(|| "base"), cur)?;
 
-                let mut index_bits = Vec::with_capacity(index_bit_count);
-                for i in 0..index_bit_count {
-                    let bit = AllocatedBit::alloc(cs.namespace(|| format!("index bit {}", i)), {
-                        indexes.map(|index| ((index >> i) & 1) == 1)
-                    })?;
+            // sub
+            let cur = auth_path.sub.synthesize(cs.namespace(|| "sub"), cur)?;
 
-                    index_bits.push(Boolean::from(bit));
-                }
-
-                auth_path_bits.extend_from_slice(&index_bits);
-
-                // Witness the authentication path elements adjacent
-                // at this depth.
-                let path_elements = elements
-                    .iter()
-                    .enumerate()
-                    .map(|(i, elt)| {
-                        num::AllocatedNum::alloc(
-                            cs.namespace(|| format!("path element {}", i)),
-                            || elt.ok_or_else(|| SynthesisError::AssignmentMissing),
-                        )
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let inserted = insert(cs, &cur, &index_bits, &path_elements)?;
-
-                // Compute the new subtree value
-                cur = <Tree::Hasher as Hasher>::Function::hash_multi_leaf_circuit::<Tree::Arity, _>(
-                    cs.namespace(|| "computation of commitment hash"),
-                    &inserted,
-                    i,
-                )?;
-            }
-
-            // allocate input for is_right auth_path
-            multipack::pack_into_inputs(cs.namespace(|| "path"), &auth_path_bits)?;
+            // top
+            let cur = auth_path.top.synthesize(cs.namespace(|| "top"), cur)?;
 
             {
                 // Validate that the root of the merkle tree that we calculated is the same as the input.
@@ -272,7 +504,7 @@ impl<'a, Tree: MerkleTreeTrait> PoRCircuit<Tree> {
     {
         let por = Self {
             value,
-            auth_path,
+            auth_path: auth_path.into(),
             root,
             private,
             _tree: PhantomData,
@@ -370,7 +602,7 @@ mod tests {
         let sub_tree_arity = Tree::SubTreeArity::to_usize();
         let top_tree_arity = Tree::TopTreeArity::to_usize();
 
-        if (top_tree_arity > 0) {
+        if top_tree_arity > 0 {
             let mut sub_trees = Vec::with_capacity(top_tree_arity);
             let mut data = Vec::new();
             for i in 0..top_tree_arity {
@@ -474,68 +706,68 @@ mod tests {
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen_binary() {
-        test_por_input_circuit_with_bls12_381::<TestTree<PedersenHasher, typenum::U2>>(8_247);
+        test_por_input_circuit_with_bls12_381::<TestTree<PedersenHasher, typenum::U2>>(3, 8_247);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_blake2s_binary() {
-        test_por_input_circuit_with_bls12_381::<TestTree<Blake2sHasher, typenum::U2>>(129_135);
+        test_por_input_circuit_with_bls12_381::<TestTree<Blake2sHasher, typenum::U2>>(3, 129_135);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_sha256_binary() {
-        test_por_input_circuit_with_bls12_381::<TestTree<Sha256Hasher, typenum::U2>>(272_295);
+        test_por_input_circuit_with_bls12_381::<TestTree<Sha256Hasher, typenum::U2>>(3, 272_295);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_poseidon_binary() {
-        test_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U2>>(1_905);
+        test_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U2>>(3, 1_905);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen_quad() {
-        test_por_input_circuit_with_bls12_381::<TestTree<PedersenHasher, typenum::U4>>(12_411);
+        test_por_input_circuit_with_bls12_381::<TestTree<PedersenHasher, typenum::U4>>(3, 12_411);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_blake2s_quad() {
-        test_por_input_circuit_with_bls12_381::<TestTree<Blake2sHasher, typenum::U4>>(130_308);
+        test_por_input_circuit_with_bls12_381::<TestTree<Blake2sHasher, typenum::U4>>(3, 130_308);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_sha256_quad() {
-        test_por_input_circuit_with_bls12_381::<TestTree<Sha256Hasher, typenum::U4>>(216_270);
+        test_por_input_circuit_with_bls12_381::<TestTree<Sha256Hasher, typenum::U4>>(3, 216_270);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_poseidon_quad() {
-        test_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U4>>(1_185);
+        test_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U4>>(3, 1_185);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen_oct() {
-        test_por_input_circuit_with_bls12_381::<TestTree<PedersenHasher, typenum::U8>>(19_357);
+        test_por_input_circuit_with_bls12_381::<TestTree<PedersenHasher, typenum::U8>>(3, 19_357);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_blake2s_oct() {
-        test_por_input_circuit_with_bls12_381::<TestTree<Blake2sHasher, typenum::U8>>(174_571);
+        test_por_input_circuit_with_bls12_381::<TestTree<Blake2sHasher, typenum::U8>>(3, 174_571);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_sha256_oct() {
-        test_por_input_circuit_with_bls12_381::<TestTree<Sha256Hasher, typenum::U8>>(251_055);
+        test_por_input_circuit_with_bls12_381::<TestTree<Sha256Hasher, typenum::U8>>(3, 251_055);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_poseidon_oct() {
-        test_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U8>>(1_137);
+        test_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U8>>(3, 1_137);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_poseidon_oct_binary() {
         test_por_input_circuit_with_bls12_381::<TestTree2<PoseidonHasher, typenum::U8, typenum::U2>>(
-            1_137,
+            4, 1_455,
         );
     }
 
@@ -543,10 +775,13 @@ mod tests {
     fn test_por_input_circuit_with_bls12_381_poseidon_oct_quad_binary() {
         test_por_input_circuit_with_bls12_381::<
             TestTree3<PoseidonHasher, typenum::U8, typenum::U4, typenum::U2>,
-        >(1_137);
+        >(4, 1_137);
     }
 
-    fn test_por_input_circuit_with_bls12_381<Tree: MerkleTreeTrait>(num_constraints: usize) {
+    fn test_por_input_circuit_with_bls12_381<Tree: 'static + MerkleTreeTrait>(
+        num_inputs: usize,
+        num_constraints: usize,
+    ) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let arity = Tree::Arity::to_usize();
@@ -582,7 +817,7 @@ mod tests {
             // -- PoR
             let pub_params = por::PublicParams {
                 leaves,
-                private: true,
+                private: false,
             };
             let pub_inputs = por::PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
                 challenge: i,
@@ -608,7 +843,7 @@ mod tests {
             let mut cs = TestConstraintSystem::<Bls12>::new();
             let por = PoRCircuit::<ResTree<Tree>> {
                 value: Root::Val(Some(proof.data.into())),
-                auth_path: proof.proof.as_options(),
+                auth_path: proof.proof.as_options().into(),
                 root: Root::Val(Some(pub_inputs.commitment.unwrap().into())),
                 private: false,
                 _tree: PhantomData,
@@ -617,39 +852,35 @@ mod tests {
             por.synthesize(&mut cs).expect("circuit synthesis failed");
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
-            assert_eq!(cs.num_inputs(), 3, "wrong number of inputs");
+            assert_eq!(cs.num_inputs(), num_inputs, "wrong number of inputs");
             assert_eq!(
                 cs.num_constraints(),
                 num_constraints,
                 "wrong number of constraints"
             );
 
-            let auth_path_bits = challenge_into_auth_path_bits::<Tree::Arity>(
-                pub_inputs.challenge,
-                pub_params.leaves,
-            );
-            let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
+            let generated_inputs = PoRCompound::<ResTree<Tree>>::generate_public_inputs(
+                &pub_inputs,
+                &pub_params,
+                None,
+            )
+            .unwrap();
 
-            let mut expected_inputs = Vec::new();
-            expected_inputs.extend(packed_auth_path);
-            expected_inputs.push(pub_inputs.commitment.unwrap().into());
+            let expected_inputs = cs.get_inputs();
 
-            assert_eq!(cs.get_input(0, "ONE"), Fr::one(), "wrong input 0");
-
-            assert_eq!(
-                cs.get_input(1, "path/input 0"),
-                expected_inputs[0],
-                "wrong packed_auth_path"
-            );
+            for ((input, label), generated_input) in
+                expected_inputs.iter().skip(1).zip(generated_inputs.iter())
+            {
+                assert_eq!(input, generated_input, "{}", label);
+            }
 
             assert_eq!(
-                cs.get_input(2, "root/input variable"),
-                expected_inputs[1],
-                "wrong root input"
+                generated_inputs.len(),
+                expected_inputs.len() - 1,
+                "inputs are not the same length"
             );
 
-            assert!(cs.is_satisfied(), "constraints are not all satisfied");
-            assert!(cs.verify(&expected_inputs), "failed to verify inputs");
+            assert!(cs.verify(&generated_inputs), "failed to verify inputs");
         }
     }
 
@@ -677,7 +908,7 @@ mod tests {
         private_por_test_compound::<TestTree<PoseidonHasher, typenum::U4>>();
     }
 
-    fn private_por_test_compound<Tree: MerkleTreeTrait>() {
+    fn private_por_test_compound<Tree: 'static + MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let leaves = 64; // good for 2, 4 and 8
 
@@ -854,7 +1085,7 @@ mod tests {
 
             let por = PoRCircuit::<Tree> {
                 value: Root::Val(Some(proof.data.into())),
-                auth_path: proof.proof.as_options(),
+                auth_path: proof.proof.as_options().into(),
                 root: Root::Val(Some(tree.root().into())),
                 private: true,
                 _tree: PhantomData,

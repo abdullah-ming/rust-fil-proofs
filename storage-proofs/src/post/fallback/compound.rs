@@ -36,7 +36,7 @@ impl<C: Circuit<Bls12>, P: ParameterSetMetadata, H: Hasher> CacheableParameters<
 impl<'a, H> CompoundProof<'a, FallbackPoSt<'a, H>, FallbackPoStCircuit<H>>
     for FallbackPoStCompound<H>
 where
-    H: 'a + Hasher,
+    H: 'static + Hasher,
 {
     fn generate_public_inputs(
         pub_inputs: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
@@ -216,7 +216,11 @@ mod tests {
         fallback_post::<PoseidonHasher>(5, 3, 2);
     }
 
-    fn fallback_post<H: Hasher>(total_sector_count: usize, sector_count: usize, partitions: usize) {
+    fn fallback_post<H: 'static + Hasher>(
+        total_sector_count: usize,
+        sector_count: usize,
+        partitions: usize,
+    ) {
         use std::fs::File;
         use std::io::prelude::*;
 

@@ -46,6 +46,7 @@ pub trait PoseidonArity:
     + Send
     + Sync
     + Clone
+    + std::fmt::Debug
     + std::ops::Add<typenum::B1>
     + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>
 {
