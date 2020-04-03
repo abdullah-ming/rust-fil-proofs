@@ -1409,13 +1409,20 @@ mod tests {
         let mut data = Vec::new();
         for _ in 0..leafs {
             let elt: H::Domain = H::Domain::random(&mut rng);
-            let bytes = H::Domain::into_bytes(&elt);
-            data.write(&bytes).unwrap();
+            data.push(elt);
         }
 
         let mut trees = Vec::with_capacity(SubTreeArity::to_usize());
         for i in 0..SubTreeArity::to_usize() {
-            trees.push(merkletree::merkle::MerkleTree::<H::Domain, H::Function, DiskStore<_>, BaseTreeArity>::from_data(&data).expect("failed to build tree"));
+            trees.push(
+                merkletree::merkle::MerkleTree::<
+                    H::Domain,
+                    H::Function,
+                    DiskStore<_>,
+                    BaseTreeArity,
+                >::try_from_iter(data.clone().into_iter().map(Ok))
+                .expect("failed to build tree"),
+            );
         }
 
         let tree = merkletree::merkle::MerkleTree::<
@@ -1457,8 +1464,7 @@ mod tests {
         let mut data = Vec::new();
         for _ in 0..leafs {
             let elt: H::Domain = H::Domain::random(&mut rng);
-            let bytes = H::Domain::into_bytes(&elt);
-            data.write(&bytes).unwrap();
+            data.push(elt);
         }
 
         let mut sub_trees = Vec::with_capacity(TopTreeArity::to_usize());
@@ -1471,7 +1477,7 @@ mod tests {
                         H::Function,
                         DiskStore<_>,
                         BaseTreeArity,
-                    >::from_data(&data)
+                    >::try_from_iter(data.clone().into_iter().map(Ok))
                     .expect("failed to build tree"),
                 );
             }
@@ -1526,8 +1532,23 @@ mod tests {
     }
 
     #[test]
+    fn merklepath_poseidon_sub_oct_binary() {
+        merklepath_sub::<PoseidonHasher, typenum::U8, typenum::U2>();
+    }
+
+    #[test]
+    fn merklepath_poseidon_sub_oct_quad() {
+        merklepath_sub::<PoseidonHasher, typenum::U8, typenum::U4>();
+    }
+
+    #[test]
     fn merklepath_pedersen_top_binary_binary_binary() {
         merklepath_top::<PedersenHasher, typenum::U2, typenum::U2, typenum::U2>();
+    }
+
+    #[test]
+    fn merklepath_poseidon_top_oct_quad_binary() {
+        merklepath_top::<PoseidonHasher, typenum::U8, typenum::U4, typenum::U2>();
     }
 
     #[test]
