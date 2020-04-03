@@ -164,16 +164,20 @@ impl<'a, Tree: MerkleTreeTrait> Circuit<Bls12> for PoRCircuit<Tree> {
             base_arity.count_ones(),
             "base arity must be power of two"
         );
-        assert_eq!(
-            1,
-            sub_arity.count_ones(),
-            "subtree arity must be power of two"
-        );
-        assert_eq!(
-            1,
-            top_arity.count_ones(),
-            "top tree arity must be power of two"
-        );
+        if sub_arity > 0 {
+            assert_eq!(
+                1,
+                sub_arity.count_ones(),
+                "subtree arity must be power of two"
+            );
+        }
+        if top_arity > 0 {
+            assert_eq!(
+                1,
+                top_arity.count_ones(),
+                "top tree arity must be power of two"
+            );
+        }
 
         let log_base_arity = base_arity.trailing_zeros() as usize;
         let log_sub_arity = sub_arity.trailing_zeros() as usize;
@@ -322,13 +326,18 @@ mod tests {
         rng: &mut R,
         size: usize,
     ) -> (Vec<u8>, ResTree<Tree>) {
-        let el = <Tree::Hasher as Hasher>::Domain::random(rng);
-        let elements = (0..size).map(|_| el).collect::<Vec<_>>();
+        let elements = (0..size)
+            .map(|_| <Tree::Hasher as Hasher>::Domain::random(rng))
+            .collect::<Vec<_>>();
         let mut data = Vec::new();
-        elements
-            .iter()
-            .for_each(|elt| data.extend(elt.into_bytes()));
-        (data, MerkleTreeWrapper::from_data(elements).unwrap())
+        for el in &elements {
+            data.extend_from_slice(AsRef::<[u8]>::as_ref(el));
+        }
+
+        (
+            data,
+            MerkleTreeWrapper::try_from_iter(elements.iter().map(|v| Ok(*v))).unwrap(),
+        )
     }
 
     #[allow(clippy::type_complexity)]
