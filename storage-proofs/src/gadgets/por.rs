@@ -335,15 +335,15 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
         );
         dbg!(height);
         if Tree::TopTreeArity::to_usize() > 0 {
-            let base_challenge = pub_inputs.challenge % Tree::Arity::to_usize();
-            let sub_challenge =
-                get_challenge_index(base_challenge, Tree::SubTreeArity::to_usize(), height - 2);
-            let top_challenge =
-                get_challenge_index(sub_challenge, Tree::TopTreeArity::to_usize(), height - 1);
-
             let top_leaves = Tree::TopTreeArity::to_usize();
             let sub_leaves = Tree::SubTreeArity::to_usize();
             let base_leaves = pub_params.leaves / top_leaves / sub_leaves;
+
+            let base_challenge = pub_inputs.challenge % base_leaves;
+            let sub_challenge =
+                get_challenge_index(pub_inputs.challenge, Tree::Arity::to_usize(), height - 2);
+            let top_challenge =
+                get_challenge_index(sub_challenge, Tree::SubTreeArity::to_usize(), height - 1);
 
             {
                 let base_bits =
@@ -705,80 +705,78 @@ mod tests {
     }
 
     #[test]
-    fn test_por_input_circuit_with_bls12_381_pedersen_binary() {
-        test_por_input_circuit_with_bls12_381::<TestTree<PedersenHasher, typenum::U2>>(3, 8_247);
+    fn test_por_circuit_pedersen_base_2() {
+        test_por_circuit::<TestTree<PedersenHasher, typenum::U2>>(3, 8_247);
     }
 
     #[test]
-    fn test_por_input_circuit_with_bls12_381_blake2s_binary() {
-        test_por_input_circuit_with_bls12_381::<TestTree<Blake2sHasher, typenum::U2>>(3, 129_135);
+    fn test_por_circuit_blake2s_base_2() {
+        test_por_circuit::<TestTree<Blake2sHasher, typenum::U2>>(3, 129_135);
     }
 
     #[test]
-    fn test_por_input_circuit_with_bls12_381_sha256_binary() {
-        test_por_input_circuit_with_bls12_381::<TestTree<Sha256Hasher, typenum::U2>>(3, 272_295);
+    fn test_por_circuit_sha256_base_2() {
+        test_por_circuit::<TestTree<Sha256Hasher, typenum::U2>>(3, 272_295);
     }
 
     #[test]
-    fn test_por_input_circuit_with_bls12_381_poseidon_binary() {
-        test_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U2>>(3, 1_905);
+    fn test_por_circuit_poseidon_base_2() {
+        test_por_circuit::<TestTree<PoseidonHasher, typenum::U2>>(3, 1_905);
     }
 
     #[test]
-    fn test_por_input_circuit_with_bls12_381_pedersen_quad() {
-        test_por_input_circuit_with_bls12_381::<TestTree<PedersenHasher, typenum::U4>>(3, 12_411);
+    fn test_por_circuit_pedersen_base_4() {
+        test_por_circuit::<TestTree<PedersenHasher, typenum::U4>>(3, 12_411);
     }
 
     #[test]
-    fn test_por_input_circuit_with_bls12_381_blake2s_quad() {
-        test_por_input_circuit_with_bls12_381::<TestTree<Blake2sHasher, typenum::U4>>(3, 130_308);
+    fn test_por_circuit_blake2s_base_4() {
+        test_por_circuit::<TestTree<Blake2sHasher, typenum::U4>>(3, 130_308);
     }
 
     #[test]
-    fn test_por_input_circuit_with_bls12_381_sha256_quad() {
-        test_por_input_circuit_with_bls12_381::<TestTree<Sha256Hasher, typenum::U4>>(3, 216_270);
+    fn test_por_circuit_sha256_base_4() {
+        test_por_circuit::<TestTree<Sha256Hasher, typenum::U4>>(3, 216_270);
     }
 
     #[test]
-    fn test_por_input_circuit_with_bls12_381_poseidon_quad() {
-        test_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U4>>(3, 1_185);
+    fn test_por_circuit_poseidon_base_4() {
+        test_por_circuit::<TestTree<PoseidonHasher, typenum::U4>>(3, 1_185);
     }
 
     #[test]
-    fn test_por_input_circuit_with_bls12_381_pedersen_oct() {
-        test_por_input_circuit_with_bls12_381::<TestTree<PedersenHasher, typenum::U8>>(3, 19_357);
+    fn test_por_circuit_pedersen_base_8() {
+        test_por_circuit::<TestTree<PedersenHasher, typenum::U8>>(3, 19_357);
     }
 
     #[test]
-    fn test_por_input_circuit_with_bls12_381_blake2s_oct() {
-        test_por_input_circuit_with_bls12_381::<TestTree<Blake2sHasher, typenum::U8>>(3, 174_571);
+    fn test_por_circuit_blake2s_base_8() {
+        test_por_circuit::<TestTree<Blake2sHasher, typenum::U8>>(3, 174_571);
     }
 
     #[test]
-    fn test_por_input_circuit_with_bls12_381_sha256_oct() {
-        test_por_input_circuit_with_bls12_381::<TestTree<Sha256Hasher, typenum::U8>>(3, 251_055);
+    fn test_por_circuit_sha256_base_8() {
+        test_por_circuit::<TestTree<Sha256Hasher, typenum::U8>>(3, 251_055);
     }
 
     #[test]
-    fn test_por_input_circuit_with_bls12_381_poseidon_oct() {
-        test_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U8>>(3, 1_137);
+    fn test_por_circuit_poseidon_base_8() {
+        test_por_circuit::<TestTree<PoseidonHasher, typenum::U8>>(3, 1_137);
     }
 
     #[test]
-    fn test_por_input_circuit_with_bls12_381_poseidon_oct_binary() {
-        test_por_input_circuit_with_bls12_381::<TestTree2<PoseidonHasher, typenum::U8, typenum::U2>>(
-            4, 1_455,
+    fn test_por_circuit_poseidon_sub_8_2() {
+        test_por_circuit::<TestTree2<PoseidonHasher, typenum::U8, typenum::U2>>(4, 1_455);
+    }
+
+    #[test]
+    fn test_por_circuit_poseidon_top_8_4_2() {
+        test_por_circuit::<TestTree3<PoseidonHasher, typenum::U8, typenum::U4, typenum::U2>>(
+            5, 1_137,
         );
     }
 
-    #[test]
-    fn test_por_input_circuit_with_bls12_381_poseidon_oct_quad_binary() {
-        test_por_input_circuit_with_bls12_381::<
-            TestTree3<PoseidonHasher, typenum::U8, typenum::U4, typenum::U2>,
-        >(4, 1_137);
-    }
-
-    fn test_por_input_circuit_with_bls12_381<Tree: 'static + MerkleTreeTrait>(
+    fn test_por_circuit<Tree: 'static + MerkleTreeTrait>(
         num_inputs: usize,
         num_constraints: usize,
     ) {
@@ -1007,36 +1005,26 @@ mod tests {
     }
 
     #[test]
-    fn test_private_por_input_circuit_with_bls12_381_pedersen_binary() {
-        test_private_por_input_circuit_with_bls12_381::<TestTree<PedersenHasher, typenum::U2>>(
-            8_246,
-        );
+    fn test_private_por_input_circuit_pedersen_binary() {
+        test_private_por_input_circuit::<TestTree<PedersenHasher, typenum::U2>>(8_246);
     }
 
     #[test]
-    fn test_private_por_input_circuit_with_bls12_381_poseidon_binary() {
-        test_private_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U2>>(
-            1_904,
-        );
+    fn test_private_por_input_circuit_poseidon_binary() {
+        test_private_por_input_circuit::<TestTree<PoseidonHasher, typenum::U2>>(1_904);
     }
 
     #[test]
-    fn test_private_por_input_circuit_with_bls12_381_pedersen_quad() {
-        test_private_por_input_circuit_with_bls12_381::<TestTree<PedersenHasher, typenum::U4>>(
-            12_410,
-        );
+    fn test_private_por_input_circuit_pedersen_quad() {
+        test_private_por_input_circuit::<TestTree<PedersenHasher, typenum::U4>>(12_410);
     }
 
     #[test]
-    fn test_private_por_input_circuit_with_bls12_381_poseidon_quad() {
-        test_private_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U4>>(
-            1_184,
-        );
+    fn test_private_por_input_circuit_poseidon_quad() {
+        test_private_por_input_circuit::<TestTree<PoseidonHasher, typenum::U4>>(1_184);
     }
 
-    fn test_private_por_input_circuit_with_bls12_381<Tree: MerkleTreeTrait>(
-        num_constraints: usize,
-    ) {
+    fn test_private_por_input_circuit<Tree: MerkleTreeTrait>(num_constraints: usize) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 64; // good for 2, 4 and 8
