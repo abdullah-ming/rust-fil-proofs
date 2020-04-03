@@ -138,6 +138,7 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> SubPath<H, Arity> {
 
         let mut auth_path_bits = Vec::with_capacity(self.path.len());
 
+        dbg!(self.path.len(), &self.path);
         for (i, path) in self.path.into_iter().enumerate() {
             let elements = path.hashes;
             let indexes = path.index;
@@ -244,17 +245,18 @@ pub fn challenge_into_auth_path_bits<U: typenum::Unsigned>(
     let mut bits = Vec::new();
     let mut n = challenge;
     let arity = U::to_usize();
-
     assert_eq!(1, arity.count_ones());
     let log_arity = arity.trailing_zeros() as usize;
+    dbg!(&height, &bits, &arity, &log_arity);
 
-    for _ in 0..height {
+    for _ in 0..height - 1 {
         // Calculate the index
         let index = n % arity;
         n /= arity;
 
         // turn the index into bits
         for i in 0..log_arity {
+            dbg!("pushing a bit");
             bits.push((index >> i) & 1 == 1);
         }
     }
@@ -322,11 +324,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
             let mut n = challenge;
             assert_eq!(1, arity.count_ones());
 
+            let mut leaves = 1;
             for _ in 0..height {
-                n /= arity;
-                dbg!(n, arity);
+                leaves *= arity;
             }
-            n
+            let (index, reduced_challenge) = (challenge % leaves, challenge / leaves);
+            (index, reduced_challenge)
         };
 
         let height = compound_path_length::<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>(
@@ -338,19 +341,20 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
             let sub_leaves = Tree::SubTreeArity::to_usize();
             let base_leaves = pub_params.leaves / top_leaves / sub_leaves;
 
-            let base_challenge = pub_inputs.challenge % base_leaves;
-            let sub_challenge =
+            let (base_challenge, reduced_challenge) =
                 get_challenge_index(pub_inputs.challenge, Tree::Arity::to_usize(), height - 2);
-            let top_challenge =
-                get_challenge_index(sub_challenge, Tree::SubTreeArity::to_usize(), height - 1);
+            let (sub_challenge, reduced_challenge) =
+                get_challenge_index(reduced_challenge, Tree::SubTreeArity::to_usize(), 1);
+            let (top_challenge, _) =
+                get_challenge_index(reduced_challenge, Tree::TopTreeArity::to_usize(), 1);
 
             dbg!(
-                top_challenge,
-                top_leaves,
-                sub_challenge,
-                sub_leaves,
                 base_challenge,
                 base_leaves,
+                sub_challenge,
+                sub_leaves,
+                top_challenge,
+                top_leaves,
                 pub_inputs.challenge
             );
 
@@ -358,6 +362,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
                 let base_bits =
                     challenge_into_auth_path_bits::<Tree::Arity>(base_challenge, base_leaves);
                 let base_packed = multipack::compute_multipacking::<Bls12>(&base_bits);
+                dbg!(&base_leaves, &base_bits);
                 inputs.extend(base_packed);
             }
 
@@ -365,6 +370,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
                 let sub_bits =
                     challenge_into_auth_path_bits::<Tree::SubTreeArity>(sub_challenge, sub_leaves);
                 let sub_packed = multipack::compute_multipacking::<Bls12>(&sub_bits);
+                dbg!(&sub_bits);
                 inputs.extend(sub_packed);
             }
 
@@ -372,15 +378,17 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
                 let top_bits =
                     challenge_into_auth_path_bits::<Tree::TopTreeArity>(top_challenge, top_leaves);
                 let top_packed = multipack::compute_multipacking::<Bls12>(&top_bits);
+                dbg!(&top_bits);
                 inputs.extend(top_packed);
             }
         } else if Tree::SubTreeArity::to_usize() > 0 {
             let sub_leaves = Tree::SubTreeArity::to_usize();
             let base_leaves = pub_params.leaves / sub_leaves;
 
-            let base_challenge = pub_inputs.challenge % base_leaves;
-            let sub_challenge =
+            let (base_challenge, reduced_challenge) =
                 get_challenge_index(pub_inputs.challenge, Tree::Arity::to_usize(), height - 1);
+            let (sub_challenge, _) =
+                get_challenge_index(reduced_challenge, Tree::SubTreeArity::to_usize(), 1);
 
             dbg!(
                 sub_challenge,
@@ -879,6 +887,7 @@ mod tests {
             for ((input, label), generated_input) in
                 expected_inputs.iter().skip(1).zip(generated_inputs.iter())
             {
+                dbg!(&label, &input, &generated_input);
                 assert_eq!(input, generated_input, "{}", label);
             }
 
