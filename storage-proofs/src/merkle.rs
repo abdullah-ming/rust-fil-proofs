@@ -1019,20 +1019,15 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
         // Generate SubProof
         let base_proof = proof_to_single(base_p, 1);
         let sub_proof = proof_to_single(p, 0);
-        // dbg!(&base_p.lemma(), &p.lemma());
-        // dbg!(&base_proof, &sub_proof);
-        // assert_eq!(base_proof.root, sub_proof.leaf);
 
         Ok(SubProof::new(base_proof, sub_proof))
     }
 
     fn verify(&self) -> bool {
         let base_proof_verifies = self.base_proof.verify();
-        // let base_root_equals_sub_leaf = self.base_proof.root == self.sub_proof.leaf;
 
         if !base_proof_verifies {
-            // && base_root_equals_sub_leaf) {
-            dbg!(base_proof_verifies); //, base_root_equals_sub_leaf,);
+            dbg!(base_proof_verifies);
             return false;
         }
 
@@ -1135,10 +1130,13 @@ impl<
         );
         let base_p = sub_p.sub_tree_proof.as_ref().unwrap();
 
-        // Generate TopProof
-        let base_proof = proof_to_single(base_p, 1);
+        let base_proof = proof_to_single::<Self::Hasher, Self::Arity, Self::Arity>(base_p, 1);
         let sub_proof = proof_to_single::<Self::Hasher, Self::Arity, Self::SubTreeArity>(sub_p, 0);
         let top_proof = proof_to_single::<Self::Hasher, Self::Arity, Self::TopTreeArity>(p, 0);
+
+        assert!(base_proof.verify());
+        assert!(sub_proof.verify());
+        assert!(top_proof.verify());
 
         Ok(TopProof::new(base_proof, sub_proof, top_proof))
     }
@@ -1146,20 +1144,9 @@ impl<
     fn verify(&self) -> bool {
         let sub_proof_verifies = self.sub_proof.verify();
         let base_proof_verifies = self.base_proof.verify();
-        let base_root_equals_sub_leaf = self.base_proof.root == self.sub_proof.leaf;
-        let sub_root_equals_top_leaf = self.sub_proof.root != self.top_proof.leaf;
 
-        if !(sub_proof_verifies
-            && base_proof_verifies
-            && base_root_equals_sub_leaf
-            && sub_root_equals_top_leaf)
-        {
-            dbg!(
-                sub_proof_verifies,
-                base_proof_verifies,
-                base_root_equals_sub_leaf,
-                sub_root_equals_top_leaf
-            );
+        if !sub_proof_verifies || !base_proof_verifies {
+            dbg!(sub_proof_verifies, base_proof_verifies);
             return false;
         }
 
