@@ -66,7 +66,7 @@ where
 impl<'a, H, G> CompoundProof<'a, DrgPoRep<'a, H, G>, DrgPoRepCircuit<'a, H>>
     for DrgPoRepCompound<H, G>
 where
-    H: 'a + Hasher,
+    H: 'static + Hasher,
     G::Key: AsRef<H::Domain>,
     G: 'a + Graph<H> + ParameterSetMetadata + Sync + Send,
 {
@@ -308,7 +308,7 @@ mod tests {
         drgporep_test_compound::<PoseidonHasher>();
     }
 
-    fn drgporep_test_compound<H: Hasher>() {
+    fn drgporep_test_compound<H: 'static + Hasher>() {
         // femme::pretty::Logger::new()
         //     .start(log::LevelFilter::Trace)
         //     .ok();

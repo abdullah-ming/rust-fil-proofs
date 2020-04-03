@@ -35,7 +35,7 @@ impl<C: Circuit<Bls12>, P: ParameterSetMetadata, H: Hasher> CacheableParameters<
 impl<'a, H> CompoundProof<'a, ElectionPoSt<'a, H>, ElectionPoStCircuit<H>>
     for ElectionPoStCompound<H>
 where
-    H: 'a + Hasher,
+    H: 'static + Hasher,
 {
     fn generate_public_inputs(
         pub_inputs: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
@@ -197,7 +197,7 @@ mod tests {
         election_post_test_compound::<PoseidonHasher>();
     }
 
-    fn election_post_test_compound<H: Hasher>() {
+    fn election_post_test_compound<H: 'static + Hasher>() {
         use std::fs::File;
         use std::io::prelude::*;
 

@@ -138,7 +138,7 @@ mod tests {
         test_rational_post_circuit::<PoseidonHasher>(3_806);
     }
 
-    fn test_rational_post_circuit<H: Hasher>(expected_constraints: usize) {
+    fn test_rational_post_circuit<H: 'static + Hasher>(expected_constraints: usize) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 32;

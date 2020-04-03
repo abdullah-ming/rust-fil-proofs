@@ -207,7 +207,7 @@ mod tests {
         test_election_post_circuit::<PoseidonHasher>(24_426);
     }
 
-    fn test_election_post_circuit<H: Hasher>(expected_constraints: usize) {
+    fn test_election_post_circuit<H: 'static + Hasher>(expected_constraints: usize) {
         use std::fs::File;
         use std::io::prelude::*;
 
