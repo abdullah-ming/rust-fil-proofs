@@ -95,6 +95,8 @@ pub trait MerkleTreeTrait: Send + Sync + std::fmt::Debug {
             Self::TopTreeArity,
         >,
     ) -> Self;
+    fn height(&self) -> usize;
+    fn leaves(&self) -> usize;
 }
 
 pub trait MerkleProofTrait:
@@ -143,8 +145,12 @@ pub trait MerkleProofTrait:
             .collect::<Vec<_>>()
     }
     fn verify(&self) -> bool;
-    fn validate(&self, node: usize) -> bool;
-    fn validate_data(&self, data: <Self::Hasher as Hasher>::Domain) -> bool;
+    fn validate(&self, node: usize) -> bool {
+        node == self.path_index()
+    }
+    fn validate_data(&self, data: <Self::Hasher as Hasher>::Domain) -> bool {
+        self.leaf() == data
+    }
     fn leaf(&self) -> <Self::Hasher as Hasher>::Domain;
     fn root(&self) -> &<Self::Hasher as Hasher>::Domain;
     fn len(&self) -> usize;
@@ -206,6 +212,14 @@ impl<
             h: Default::default(),
         }
     }
+
+    fn height(&self) -> usize {
+        self.inner.height()
+    }
+
+    fn leaves(&self) -> usize {
+        self.inner.leafs()
+    }
 }
 
 macro_rules! forward_method {
@@ -259,15 +273,6 @@ impl<
         forward_method!(self.data, verify)
     }
 
-    fn validate(&self, node: usize) -> bool {
-        forward_method!(self.data, validate, node)
-    }
-
-    fn validate_data(&self, data: H::Domain) -> bool {
-        dbg!("xxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
-        forward_method!(self.data, validate_data, data)
-    }
-
     fn leaf(&self) -> H::Domain {
         forward_method!(self.data, leaf)
     }
@@ -282,6 +287,9 @@ impl<
 
     fn path(&self) -> Vec<(Vec<H::Domain>, usize)> {
         forward_method!(self.data, path)
+    }
+    fn path_index(&self) -> usize {
+        forward_method!(self.data, path_index)
     }
 
     fn proves_challenge(&self, challenge: usize) -> bool {
@@ -327,11 +335,6 @@ impl<
         config: StoreConfig,
     ) -> Result<Self> {
         let tree = merkle::MerkleTree::new_with_config(data, config)?;
-        Ok(Self::from_merkle(tree))
-    }
-
-    pub fn from_data<O: Hashable<H::Function>, I: IntoIterator<Item = O>>(data: I) -> Result<Self> {
-        let tree = merkle::MerkleTree::<<H as Hasher>::Domain, <H as Hasher>::Function, S, U, V, W>::from_data(data)?;
         Ok(Self::from_merkle(tree))
     }
 
@@ -880,7 +883,6 @@ fn proof_to_single<H: Hasher, Arity: Unsigned, TargetArity: Unsigned>(
 ) -> SingleProof<H, TargetArity> {
     let root = proof.root();
     let leaf = proof.item();
-    dbg!("making single proof", &proof.item(), proof.path());
     let path = extract_path::<H, TargetArity>(proof.lemma(), proof.path(), lemma_start_index);
 
     SingleProof::new(root, leaf, path)
@@ -931,24 +933,6 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> MerkleProofTrait for SingleProof
         self.root() == &expected_root
     }
 
-    fn validate(&self, node: usize) -> bool {
-        if self.path_index() != node {
-            return false;
-        }
-
-        self.verify()
-    }
-
-    fn validate_data(&self, data: H::Domain) -> bool {
-        dbg!(&self.leaf(), &data, &self.verify());
-
-        if !self.verify() {
-            return false;
-        }
-
-        self.leaf() == data
-    }
-
     fn leaf(&self) -> H::Domain {
         self.leaf
     }
@@ -966,6 +950,13 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> MerkleProofTrait for SingleProof
             .iter()
             .map(|x| (x.hashes.clone(), x.index))
             .collect::<Vec<_>>()
+    }
+
+    fn path_index(&self) -> usize {
+        self.path()
+            .iter()
+            .rev()
+            .fold(0, |acc, (_, index)| (acc * Self::Arity::to_usize()) + index)
     }
 
     fn proves_challenge(&self, challenge: usize) -> bool {
@@ -1016,29 +1007,7 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
 
             a.multi_node(&nodes, i)
         });
-
         self.root() == &expected_root
-    }
-
-    fn validate(&self, node: usize) -> bool {
-        let sub_path_index = ((node / Self::Arity::to_usize()) * Self::Arity::to_usize())
-            + (node % Self::Arity::to_usize());
-
-        if sub_path_index != node {
-            return false;
-        }
-
-        self.verify()
-    }
-
-    fn validate_data(&self, data: H::Domain) -> bool {
-        if !self.verify() {
-            return false;
-        }
-
-        dbg!(&self.leaf(), &data);
-
-        self.leaf() == data
     }
 
     fn leaf(&self) -> H::Domain {
@@ -1057,6 +1026,23 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
         let mut path = self.base_proof.path();
         path.extend_from_slice(&self.sub_proof.path());
         path
+    }
+
+    fn path_index(&self) -> usize {
+        let mut base_proof_leaves = 1;
+        for i in 0..self.base_proof.path().len() {
+            base_proof_leaves *= BaseArity::to_usize()
+        }
+
+        let sub_proof_index = self
+            .sub_proof
+            .path()
+            .iter()
+            .rev()
+            .fold(0, |acc, (_, index)| {
+                (acc * Self::SubTreeArity::to_usize()) + index
+            });
+        (sub_proof_index * base_proof_leaves) + self.base_proof.path_index()
     }
 
     fn proves_challenge(&self, challenge: usize) -> bool {
@@ -1130,22 +1116,10 @@ impl<
         self.root() == &expected_root
     }
 
-    fn validate(&self, node: usize) -> bool {
-        let top_path_index = ((node / Self::Arity::to_usize()) * Self::Arity::to_usize())
-            + (node % Self::Arity::to_usize());
-
-        if top_path_index != node {
-            return false;
-        }
-
-        self.verify()
-    }
-
     fn validate_data(&self, data: H::Domain) -> bool {
         if !self.verify() {
             return false;
         }
-        dbg!(&self.leaf(), &data);
         self.leaf() == data
     }
 
@@ -1166,6 +1140,37 @@ impl<
         path.extend_from_slice(&self.sub_proof.path());
         path.extend_from_slice(&self.top_proof.path());
         path
+    }
+
+    fn path_index(&self) -> usize {
+        let mut base_proof_leaves = 1;
+        for i in 0..self.base_proof.path().len() {
+            base_proof_leaves *= BaseArity::to_usize()
+        }
+
+        let mut sub_proof_leaves = base_proof_leaves * SubTreeArity::to_usize();
+
+        let sub_proof_index = self
+            .sub_proof
+            .path()
+            .iter()
+            .rev()
+            .fold(0, |acc, (_, index)| {
+                (acc * Self::TopTreeArity::to_usize()) + index
+            });
+
+        let top_proof_index = self
+            .top_proof
+            .path()
+            .iter()
+            .rev()
+            .fold(0, |acc, (_, index)| {
+                (acc * Self::TopTreeArity::to_usize()) + index
+            });
+
+        (sub_proof_index * base_proof_leaves)
+            + (top_proof_index * sub_proof_leaves)
+            + self.base_proof.path_index()
     }
 
     fn proves_challenge(&self, challenge: usize) -> bool {
