@@ -4,7 +4,7 @@ use merkletree::store::StoreConfig;
 
 use crate::error::Result;
 use crate::hasher::Hasher;
-use crate::merkle::{BinaryMerkleTree, MerkleTreeTrait};
+use crate::merkle::BinaryMerkleTree;
 use crate::proof::ProofScheme;
 use crate::Data;
 

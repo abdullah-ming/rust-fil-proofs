@@ -455,8 +455,7 @@ mod tests {
         assert!(proofs_are_valid);
 
         // Discard cached MTs that are no longer needed.
-        TemporaryAux::<Tree::Hasher, Sha256Hasher>::clear_temp(t_aux_orig)
-            .expect("t_aux delete failed");
+        TemporaryAux::<Tree, Sha256Hasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
         let expected_inputs = 20;
 
@@ -670,8 +669,7 @@ mod tests {
         .expect("failed to generate groth params");
 
         // Discard cached MTs that are no longer needed.
-        TemporaryAux::<Tree::Hasher, Sha256Hasher>::clear_temp(t_aux_orig)
-            .expect("t_aux delete failed");
+        TemporaryAux::<Tree, Sha256Hasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
         let proof = StackedCompound::prove(
             &public_params,

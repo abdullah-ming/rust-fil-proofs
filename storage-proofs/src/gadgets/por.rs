@@ -614,7 +614,7 @@ mod tests {
         if top_tree_arity > 0 {
             let mut sub_trees = Vec::with_capacity(top_tree_arity);
             let mut data = Vec::new();
-            for i in 0..top_tree_arity {
+            for _i in 0..top_tree_arity {
                 let (inner_data, tree) = generate_sub_tree::<
                     R,
                     MerkleTreeWrapper<

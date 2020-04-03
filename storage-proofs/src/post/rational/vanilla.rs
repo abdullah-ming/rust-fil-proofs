@@ -412,7 +412,7 @@ mod tests {
     // However, note that data has no relationship to anything,
     // and proof path does not actually prove that data was in the tree corresponding to expected root.
     fn make_bogus_proof<H: Hasher, U: 'static + PoseidonArity>(
-        pub_inputs: &PublicInputs<H::Domain>,
+        _pub_inputs: &PublicInputs<H::Domain>,
         rng: &mut XorShiftRng,
     ) -> MerkleProof<H, U> {
         let bogus_leaf: H::Domain = H::Domain::random(rng);

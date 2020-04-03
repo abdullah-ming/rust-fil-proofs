@@ -19,7 +19,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tre
     type Tau = Tau<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>;
     type ProverAux = (
         PersistentAux<<Tree::Hasher as Hasher>::Domain>,
-        TemporaryAux<Tree::Hasher, G>,
+        TemporaryAux<Tree, G>,
     );
 
     fn replicate(

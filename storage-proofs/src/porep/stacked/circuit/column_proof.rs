@@ -1,13 +1,12 @@
 use bellperson::gadgets::num;
 use bellperson::{ConstraintSystem, SynthesisError};
-use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use super::{column::Column, params::InclusionPath};
 
 use crate::gadgets::constraint;
 use crate::hasher::{Hasher, PoseidonArity};
-use crate::merkle::{MerkleProofTrait, MerkleTreeTrait};
+use crate::merkle::MerkleProofTrait;
 use crate::porep::stacked::{ColumnProof as VanillaColumnProof, PublicParams};
 
 #[derive(Debug, Clone)]

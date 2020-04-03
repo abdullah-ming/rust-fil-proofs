@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
+use generic_array::typenum::Unsigned;
 use log::{info, trace};
 use merkletree::merkle::{get_merkle_tree_len, is_merkle_tree_size_valid};
 use merkletree::store::{DiskStore, StoreConfig};
@@ -16,7 +17,6 @@ use super::{
     params::{
         get_node, Labels, LabelsCache, PersistentAux, Proof, PublicInputs, PublicParams,
         ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers, BINARY_ARITY,
-        OCT_ARITY,
     },
     EncodingProof, LabelingProof,
 };
@@ -266,7 +266,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         layer_challenges: &LayerChallenges,
         replica_id: &<Tree::Hasher as Hasher>::Domain,
         config: StoreConfig,
-    ) -> Result<(LabelsCache<Tree>, Labels<Tree::Hasher>)> {
+    ) -> Result<(LabelsCache<Tree>, Labels<Tree>)> {
         info!("generate labels");
 
         let layers = layer_challenges.layers();
@@ -306,7 +306,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             let layer_store: DiskStore<<Tree::Hasher as Hasher>::Domain> =
                 DiskStore::new_from_slice_with_config(
                     graph.size(),
-                    OCT_ARITY,
+                    Tree::Arity::to_usize(),
                     &labels_buffer[..layer_size],
                     layer_config.clone(),
                 )?;
@@ -328,7 +328,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         Ok((
             LabelsCache::<Tree> { labels },
-            Labels::<Tree::Hasher> {
+            Labels::<Tree> {
                 labels: label_configs,
                 _h: PhantomData,
             },
@@ -362,7 +362,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         data_tree: Option<BinaryMerkleTree<G>>,
         config: StoreConfig,
         replica_path: PathBuf,
-    ) -> Result<TransformedLayers<Tree::Hasher, G>> {
+    ) -> Result<TransformedLayers<Tree, G>> {
         // Generate key layers.
         let (_, labels) = measure_op(EncodeWindowTimeAll, || {
             Self::generate_labels(graph, layer_challenges, replica_id, config.clone())
@@ -448,8 +448,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         data_tree: Option<BinaryMerkleTree<G>>,
         config: StoreConfig,
         replica_path: PathBuf,
-        label_configs: Labels<Tree::Hasher>,
-    ) -> Result<TransformedLayers<Tree::Hasher, G>> {
+        label_configs: Labels<Tree>,
+    ) -> Result<TransformedLayers<Tree, G>> {
         trace!("transform_and_replicate_layers");
         let nodes_count = graph.size();
 
@@ -468,10 +468,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             trace!(
                 "is_merkle_tree_size_valid({}, OCT_ARITY) = {}",
                 nodes_count,
-                is_merkle_tree_size_valid(nodes_count, OCT_ARITY)
+                is_merkle_tree_size_valid(nodes_count, Tree::Arity::to_usize())
             );
             assert!(is_merkle_tree_size_valid(nodes_count, BINARY_ARITY));
-            assert!(is_merkle_tree_size_valid(nodes_count, OCT_ARITY));
+            assert!(is_merkle_tree_size_valid(
+                nodes_count,
+                Tree::Arity::to_usize()
+            ));
 
             let layers = layer_challenges.layers();
             assert!(layers > 0);
@@ -489,18 +492,18 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             let mut tree_r_last_config = StoreConfig::from_config(
                 &config,
                 CacheKey::CommRLastTree.to_string(),
-                Some(get_merkle_tree_len(nodes_count, OCT_ARITY)?),
+                Some(get_merkle_tree_len(nodes_count, Tree::Arity::to_usize())?),
             );
             tree_r_last_config.levels =
-                StoreConfig::default_cached_above_base_layer(nodes_count, OCT_ARITY);
+                StoreConfig::default_cached_above_base_layer(nodes_count, Tree::Arity::to_usize());
 
             let mut tree_c_config = StoreConfig::from_config(
                 &config,
                 CacheKey::CommCTree.to_string(),
-                Some(get_merkle_tree_len(nodes_count, OCT_ARITY)?),
+                Some(get_merkle_tree_len(nodes_count, Tree::Arity::to_usize())?),
             );
             tree_c_config.levels =
-                StoreConfig::default_cached_above_base_layer(nodes_count, OCT_ARITY);
+                StoreConfig::default_cached_above_base_layer(nodes_count, Tree::Arity::to_usize());
 
             let labels = LabelsCache::<Tree>::new(&label_configs)?;
 
@@ -785,7 +788,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         pp: &'a PublicParams<Tree::Hasher>,
         replica_id: &<Tree::Hasher as Hasher>::Domain,
         config: StoreConfig,
-    ) -> Result<Labels<Tree::Hasher>> {
+    ) -> Result<Labels<Tree>> {
         info!("replicate_phase1");
 
         let (_, labels) = measure_op(EncodeWindowTimeAll, || {
@@ -800,7 +803,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     #[allow(clippy::type_complexity)]
     pub fn replicate_phase2(
         pp: &'a PublicParams<Tree::Hasher>,
-        labels: Labels<Tree::Hasher>,
+        labels: Labels<Tree>,
         data: Data<'a>,
         data_tree: BinaryMerkleTree<G>,
         config: StoreConfig,
@@ -1042,8 +1045,7 @@ mod tests {
         .expect("failed to verify partition proofs");
 
         // Discard cached MTs that are no longer needed.
-        TemporaryAux::<Tree::Hasher, Blake2sHasher>::clear_temp(t_aux_orig)
-            .expect("t_aux delete failed");
+        TemporaryAux::<Tree, Blake2sHasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
         assert!(proofs_are_valid);
     }

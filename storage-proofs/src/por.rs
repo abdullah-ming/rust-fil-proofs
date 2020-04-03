@@ -1,5 +1,4 @@
 use anyhow::ensure;
-use generic_array::typenum::Unsigned;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
@@ -152,7 +151,7 @@ mod tests {
     use super::*;
 
     use ff::Field;
-    use generic_array::typenum::{self, Unsigned};
+    use generic_array::typenum;
     use paired::bls12_381::Fr;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
@@ -251,7 +250,7 @@ mod tests {
     // However, note that data has no relationship to anything,
     // and proof path does not actually prove that data was in the tree corresponding to expected root.
     fn make_bogus_proof<Proof: MerkleProofTrait>(
-        pub_inputs: &PublicInputs<<Proof::Hasher as Hasher>::Domain>,
+        _pub_inputs: &PublicInputs<<Proof::Hasher as Hasher>::Domain>,
         rng: &mut XorShiftRng,
     ) -> DataProof<Proof> {
         let bogus_leaf = <Proof::Hasher as Hasher>::Domain::random(rng);

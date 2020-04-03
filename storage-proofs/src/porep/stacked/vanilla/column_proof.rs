@@ -1,4 +1,3 @@
-use generic_array::typenum;
 use log::trace;
 use paired::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
@@ -7,7 +6,7 @@ use super::column::Column;
 
 use crate::error::Result;
 use crate::hasher::Hasher;
-use crate::merkle::{IncludedNode, MerkleProof, MerkleProofTrait};
+use crate::merkle::{IncludedNode, MerkleProofTrait};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ColumnProof<Proof: MerkleProofTrait> {

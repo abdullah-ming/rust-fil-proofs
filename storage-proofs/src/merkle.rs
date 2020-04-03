@@ -1098,7 +1098,7 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
 
     fn path_index(&self) -> usize {
         let mut base_proof_leaves = 1;
-        for i in 0..self.base_proof.path().len() {
+        for _i in 0..self.base_proof.path().len() {
             base_proof_leaves *= BaseArity::to_usize()
         }
 
@@ -1231,11 +1231,11 @@ impl<
 
     fn path_index(&self) -> usize {
         let mut base_proof_leaves = 1;
-        for i in 0..self.base_proof.path().len() {
+        for _i in 0..self.base_proof.path().len() {
             base_proof_leaves *= BaseArity::to_usize()
         }
 
-        let mut sub_proof_leaves = base_proof_leaves * SubTreeArity::to_usize();
+        let sub_proof_leaves = base_proof_leaves * SubTreeArity::to_usize();
 
         let sub_proof_index = self
             .sub_proof
@@ -1556,9 +1556,7 @@ mod tests {
         TopTreeArity: 'static + PoseidonArity,
     >() {
         let leafs = 64;
-        let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed()).unwrap();
         let mut rng = rand::thread_rng();
-        let node_size = 32;
         let mut data = Vec::new();
         for _ in 0..leafs {
             let elt: H::Domain = H::Domain::random(&mut rng);
@@ -1566,9 +1564,9 @@ mod tests {
         }
 
         let mut sub_trees = Vec::with_capacity(TopTreeArity::to_usize());
-        for i in 0..TopTreeArity::to_usize() {
+        for _i in 0..TopTreeArity::to_usize() {
             let mut trees = Vec::with_capacity(SubTreeArity::to_usize());
-            for i in 0..SubTreeArity::to_usize() {
+            for _i in 0..SubTreeArity::to_usize() {
                 trees.push(
                     merkletree::merkle::MerkleTree::<
                         H::Domain,

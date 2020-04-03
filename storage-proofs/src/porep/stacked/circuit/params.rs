@@ -12,7 +12,7 @@ use crate::drgraph::Graph;
 use crate::gadgets::por::PoRCircuit;
 use crate::gadgets::variables::Root;
 use crate::hasher::{Hasher, PoseidonArity};
-use crate::merkle::{DiskStore, MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper};
+use crate::merkle::{DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper};
 use crate::porep::stacked::{
     Proof as VanillaProof, PublicParams, ReplicaColumnProof as VanillaReplicaColumnProof,
 };
