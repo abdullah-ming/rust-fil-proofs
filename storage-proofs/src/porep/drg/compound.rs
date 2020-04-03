@@ -65,7 +65,7 @@ where
 impl<'a, H, G> CompoundProof<'a, DrgPoRep<'a, H, G>, DrgPoRepCircuit<'a, H>>
     for DrgPoRepCompound<H, G>
 where
-    H: 'a + Hasher,
+    H: 'static + Hasher,
     G::Key: AsRef<<H as Hasher>::Domain>,
     G: 'a + Graph<H> + ParameterSetMetadata + Sync + Send,
 {
@@ -308,7 +308,7 @@ mod tests {
         drgporep_test_compound::<BinaryMerkleTree<PoseidonHasher>>();
     }
 
-    fn drgporep_test_compound<Tree: MerkleTreeTrait>() {
+    fn drgporep_test_compound<Tree: 'static + MerkleTreeTrait>() {
         // femme::pretty::Logger::new()
         //     .start(log::LevelFilter::Trace)
         //     .ok();
