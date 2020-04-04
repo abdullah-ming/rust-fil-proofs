@@ -319,3 +319,92 @@ pub fn get_base_tree_count<Tree: MerkleTreeTrait>() -> usize {
         Tree::SubTreeArity::to_usize()
     }
 }
+
+#[cfg(test)]
+pub type ResTree<Tree> = MerkleTreeWrapper<
+    <Tree as MerkleTreeTrait>::Hasher,
+    <Tree as MerkleTreeTrait>::Store,
+    <Tree as MerkleTreeTrait>::Arity,
+    <Tree as MerkleTreeTrait>::SubTreeArity,
+    <Tree as MerkleTreeTrait>::TopTreeArity,
+>;
+
+#[cfg(test)]
+fn generate_base_tree<R: rand::Rng, Tree: MerkleTreeTrait>(
+    rng: &mut R,
+    nodes: usize,
+) -> (Vec<u8>, ResTree<Tree>) {
+    let elements = (0..nodes)
+        .map(|_| <Tree::Hasher as Hasher>::Domain::random(rng))
+        .collect::<Vec<_>>();
+    let mut data = Vec::new();
+    for el in &elements {
+        data.extend_from_slice(AsRef::<[u8]>::as_ref(el));
+    }
+    (
+        data,
+        MerkleTreeWrapper::try_from_iter(elements.iter().map(|v| Ok(*v))).unwrap(),
+    )
+}
+
+#[cfg(test)]
+fn generate_sub_tree<R: rand::Rng, Tree: MerkleTreeTrait>(
+    rng: &mut R,
+    nodes: usize,
+) -> (Vec<u8>, ResTree<Tree>) {
+    let base_tree_count = Tree::SubTreeArity::to_usize();
+    let base_tree_size = nodes / base_tree_count;
+    let mut trees = Vec::with_capacity(base_tree_count);
+    let mut data = Vec::new();
+
+    for _ in 0..base_tree_count {
+        let (inner_data, tree) = generate_base_tree::<
+            R,
+            MerkleTreeWrapper<Tree::Hasher, Tree::Store, Tree::Arity>,
+        >(rng, base_tree_size);
+        trees.push(tree);
+        data.extend(inner_data);
+    }
+    (data, MerkleTreeWrapper::from_trees(trees).unwrap())
+}
+
+#[cfg(test)]
+pub fn generate_tree<Tree: MerkleTreeTrait, R: rand::Rng>(
+    rng: &mut R,
+    nodes: usize,
+) -> (Vec<u8>, ResTree<Tree>) {
+    let sub_tree_arity = Tree::SubTreeArity::to_usize();
+    let top_tree_arity = Tree::TopTreeArity::to_usize();
+
+    if top_tree_arity > 0 {
+        assert!(
+            sub_tree_arity != 0,
+            "malformed tree with TopTreeArity > 0 and SubTreeARity == 0"
+        );
+
+        let mut sub_trees = Vec::with_capacity(top_tree_arity);
+        let mut data = Vec::new();
+        for _i in 0..top_tree_arity {
+            let (inner_data, tree) = generate_sub_tree::<
+                R,
+                MerkleTreeWrapper<
+                    Tree::Hasher,
+                    Tree::Store,
+                    Tree::Arity,
+                    Tree::SubTreeArity,
+                    typenum::U0,
+                >,
+            >(rng, nodes / top_tree_arity);
+
+            sub_trees.push(tree);
+            data.extend(inner_data);
+        }
+        (data, MerkleTreeWrapper::from_sub_trees(sub_trees).unwrap())
+    } else {
+        if sub_tree_arity > 0 {
+            generate_sub_tree::<R, Tree>(rng, nodes)
+        } else {
+            generate_base_tree::<R, Tree>(rng, nodes)
+        }
+    }
+}

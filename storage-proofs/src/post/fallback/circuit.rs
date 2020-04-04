@@ -12,7 +12,7 @@ use crate::gadgets::constraint;
 use crate::gadgets::por::PoRCircuit;
 use crate::gadgets::variables::Root;
 use crate::hasher::{HashFunction, Hasher};
-use crate::merkle::{DiskStore, MerkleTreeWrapper};
+use crate::merkle::{DiskStore, MerkleProofTrait, MerkleTreeWrapper};
 use crate::util::NODE_SIZE;
 
 use super::vanilla::{PublicParams, PublicSector, SectorProof};
@@ -36,9 +36,9 @@ pub struct Sector<H: Hasher> {
 }
 
 impl<H: Hasher> Sector<H> {
-    pub fn circuit(
+    pub fn circuit<P: MerkleProofTrait<Hasher = H>>(
         sector: &PublicSector<H::Domain>,
-        vanilla_proof: &SectorProof<H>,
+        vanilla_proof: &SectorProof<P>,
     ) -> Result<Self> {
         let leafs = vanilla_proof
             .leafs()
@@ -194,7 +194,7 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::gadgets::TestConstraintSystem;
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
-    use crate::merkle::OctMerkleTree;
+    use crate::merkle::{generate_tree, OctMerkleTree};
     use crate::porep::stacked::OCT_ARITY;
     use crate::post::fallback::{
         self, FallbackPoSt, FallbackPoStCompound, PrivateInputs, PrivateSector, PublicInputs,
@@ -286,22 +286,8 @@ mod tests {
         let mut trees = Vec::new();
 
         for i in 0..total_sector_count {
-            let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
-                .collect();
-
-            let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-
-            let replica_path = temp_path.join(format!("replica-path-{}", i));
-            let mut f = File::create(&replica_path).unwrap();
-            f.write_all(&data).unwrap();
-
-            let cur_config = StoreConfig::from_config(&config, format!("test-lc-tree-{}", i), None);
-            trees.push(
-                graph
-                    .lcmerkle_tree(cur_config.clone(), &data, &replica_path)
-                    .unwrap(),
-            );
+            let (_data, tree) = generate_tree::<OctMerkleTree<H>, _>(rng, leaves);
+            trees.push(tree);
         }
 
         for (i, tree) in trees.iter().enumerate() {
@@ -328,7 +314,7 @@ mod tests {
             k: None,
         };
 
-        let priv_inputs = PrivateInputs::<H> {
+        let priv_inputs = PrivateInputs::<OctMerkleTree<H>> {
             sectors: &priv_sectors,
         };
 
