@@ -14,7 +14,6 @@ use crate::error::Result;
 use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, OctLCMerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
-use crate::porep::stacked::OCT_ARITY;
 use crate::proof::ProofScheme;
 use crate::sector::*;
 use crate::util::NODE_SIZE;
@@ -470,6 +469,7 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{PedersenHasher, PoseidonHasher};
     use crate::merkle::OctMerkleTree;
+    use crate::porep::stacked::OCT_ARITY;
 
     fn test_fallback_post<H: 'static + Hasher>(
         total_sector_count: usize,

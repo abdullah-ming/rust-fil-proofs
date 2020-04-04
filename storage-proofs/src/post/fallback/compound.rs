@@ -2,14 +2,12 @@ use std::marker::PhantomData;
 
 use anyhow::{anyhow, ensure};
 use bellperson::Circuit;
-use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::error::Result;
 use crate::gadgets::por::PoRCompound;
-use crate::hasher::Hasher;
-use crate::merkle::{DiskStore, MerkleTreeTrait, MerkleTreeWrapper};
+use crate::merkle::MerkleTreeTrait;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por;
 use crate::post::fallback::{self, FallbackPoSt, FallbackPoStCircuit};

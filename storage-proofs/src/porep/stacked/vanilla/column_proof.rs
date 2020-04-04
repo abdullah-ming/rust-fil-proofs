@@ -6,7 +6,7 @@ use super::column::Column;
 
 use crate::error::Result;
 use crate::hasher::Hasher;
-use crate::merkle::{IncludedNode, MerkleProofTrait};
+use crate::merkle::MerkleProofTrait;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ColumnProof<Proof: MerkleProofTrait> {
@@ -40,11 +40,6 @@ impl<Proof: MerkleProofTrait> ColumnProof<Proof> {
 
     pub fn get_node_at_layer(&self, layer: usize) -> Result<&<Proof::Hasher as Hasher>::Domain> {
         self.column().get_node_at_layer(layer)
-    }
-
-    pub fn get_verified_node_at_layer(&self, layer: usize) -> IncludedNode<Proof::Hasher> {
-        let value = self.get_node_at_layer(layer).unwrap(); // FIXME: error handling
-        IncludedNode::new(*value)
     }
 
     pub fn column_hash(&self) -> Fr {

@@ -390,7 +390,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     ) -> Result<()> {
         use std::fs::OpenOptions;
         use std::io::prelude::*;
-        use std::path::Path;
 
         let mut start = 0;
         let mut end = leafs;
