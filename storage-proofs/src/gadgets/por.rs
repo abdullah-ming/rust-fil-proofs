@@ -741,7 +741,7 @@ mod tests {
 
     #[test]
     fn test_por_circuit_pedersen_sub_8_2() {
-        test_por_circuit::<TestTree2<PedersenHasher, typenum::U8, typenum::U2>>(4, 1_455);
+        test_por_circuit::<TestTree2<PedersenHasher, typenum::U8, typenum::U2>>(4, 20_732);
     }
 
     #[test]

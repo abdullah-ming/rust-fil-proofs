@@ -161,7 +161,7 @@ mod tests {
     use crate::hasher::{
         Blake2sHasher, HashFunction, PedersenHasher, PoseidonHasher, Sha256Hasher,
     };
-    use crate::merkle::{DiskStore, MerkleProofTrait, MerkleTreeWrapper};
+    use crate::merkle::{DiskStore, MerkleProof, MerkleProofTrait, MerkleTreeWrapper};
     use crate::util::data_at_node;
 
     fn test_merklepor<Tree: MerkleTreeTrait>() {
@@ -244,27 +244,14 @@ mod tests {
         test_merklepor::<TestTree<Blake2sHasher, typenum::U4>>();
     }
 
-    // Construct a proof that satisfies a cursory validation:
-    // Data and proof are minimally consistent.
-    // Proof root matches that requested in public inputs.
-    // However, note that data has no relationship to anything,
-    // and proof path does not actually prove that data was in the tree corresponding to expected root.
+    // Takes a valid proof and breaks it.
     fn make_bogus_proof<Proof: MerkleProofTrait>(
-        _pub_inputs: &PublicInputs<<Proof::Hasher as Hasher>::Domain>,
         rng: &mut XorShiftRng,
+        mut proof: DataProof<Proof>,
     ) -> DataProof<Proof> {
         let bogus_leaf = <Proof::Hasher as Hasher>::Domain::random(rng);
-        let hashed_leaf = <Proof::Hasher as Hasher>::Function::hash_leaf(&bogus_leaf);
-
-        todo!()
-        // DataProof {
-        //     data: bogus_leaf,
-        //     proof: make_proof_for_test::<Proof>(
-        //         pub_inputs.commitment.unwrap(),
-        //         hashed_leaf,
-        //         vec![(vec![hashed_leaf; Proof::Arity::to_usize() - 1], 1)],
-        //     ),
-        // }
+        proof.proof.break_me(bogus_leaf);
+        proof
     }
 
     fn test_merklepor_validates<Tree: MerkleTreeTrait>() {
@@ -288,7 +275,21 @@ mod tests {
             commitment: Some(tree.root()),
         };
 
-        let bad_proof = make_bogus_proof::<Tree::Proof>(&pub_inputs, rng);
+        let leaf = <Tree::Hasher as Hasher>::Domain::try_from_bytes(
+            data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
+        )
+        .unwrap();
+
+        let priv_inputs = PrivateInputs::<Tree>::new(leaf, &tree);
+
+        let good_proof =
+            PoR::<Tree>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
+
+        let verified = PoR::<Tree>::verify(&pub_params, &pub_inputs, &good_proof)
+            .expect("verification failed");
+        assert!(verified);
+
+        let bad_proof = make_bogus_proof::<Tree::Proof>(rng, good_proof);
 
         let verified =
             PoR::<Tree>::verify(&pub_params, &pub_inputs, &bad_proof).expect("verification failed");
