@@ -48,8 +48,8 @@ fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> anyhow::Result<MmapM
     Ok(map)
 }
 
-fn dump_proof_bytes<H: Hasher>(
-    all_partition_proofs: &[Vec<stacked::Proof<H, Sha256Hasher>>],
+fn dump_proof_bytes<Tree: MerkleTreeTrait>(
+    all_partition_proofs: &[Vec<stacked::Proof<Tree, Sha256Hasher>>],
 ) -> anyhow::Result<()> {
     let file = OpenOptions::new()
         .write(true)

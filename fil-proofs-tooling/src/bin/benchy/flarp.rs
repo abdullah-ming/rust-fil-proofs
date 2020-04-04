@@ -1,6 +1,6 @@
 use bellperson::Circuit;
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::constants::{DefaultBinaryTree, DefaultTreeHasher, POREP_PARTITIONS};
+use filecoin_proofs::constants::{DefaultOctTree, DefaultTreeHasher, POREP_PARTITIONS};
 use filecoin_proofs::parameters::election_post_public_params;
 use filecoin_proofs::types::PaddedBytesAmount;
 use filecoin_proofs::types::*;
@@ -31,7 +31,7 @@ const SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
 ];
 
-type FlarpTree = DefaultBinaryTree;
+type FlarpTree = DefaultOctTree;
 type FlarpHasher = DefaultTreeHasher;
 
 #[derive(Default, Debug, Serialize)]
