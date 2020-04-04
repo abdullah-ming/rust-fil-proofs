@@ -369,7 +369,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
                                     )
                                 }
                             }?;
-                            MerkleProof::new_from_proof(&proof)
+                            MerkleProof::try_from_proof(proof)
                         })
                 })
                 .collect::<Result<Vec<_>>>()

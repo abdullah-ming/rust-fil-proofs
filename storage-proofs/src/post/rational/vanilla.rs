@@ -146,7 +146,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
                 if let Some(tree) = priv_inputs.trees.get(&challenge.sector) {
                     ensure!(comm_r_last == &tree.root(), Error::InvalidCommitment);
 
-                    MerkleProof::new_from_proof(&tree.gen_proof(challenged_leaf as usize)?)
+                    MerkleProof::try_from_proof(tree.gen_proof(challenged_leaf as usize)?)
                 } else {
                     bail!(Error::MalformedInput);
                 }

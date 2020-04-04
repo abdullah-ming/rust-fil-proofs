@@ -1,8 +1,9 @@
 #![allow(clippy::len_without_is_empty)]
 
+use std::convert::TryFrom;
 use std::marker::PhantomData;
 
-use anyhow::{ensure, Result};
+use anyhow::{ensure, Error, Result};
 use generic_array::typenum::{self, Unsigned, U0};
 use merkletree::hash::Algorithm;
 use merkletree::proof;
@@ -21,8 +22,9 @@ pub trait MerkleProofTrait:
     type SubTreeArity: 'static + PoseidonArity;
     type TopTreeArity: 'static + PoseidonArity;
 
-    fn new_from_proof(
-        p: &proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
+    /// Try to convert a merkletree proof into this structure.
+    fn try_from_proof(
+        p: proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
     ) -> Result<Self>;
 
     fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)> {
@@ -179,20 +181,20 @@ impl<
     type SubTreeArity = SubTreeArity;
     type TopTreeArity = TopTreeArity;
 
-    fn new_from_proof(
-        p: &proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
+    fn try_from_proof(
+        p: proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
     ) -> Result<Self> {
         if p.top_layer_nodes() > 0 {
             Ok(MerkleProof {
-                data: ProofData::Top(TopProof::new_from_proof(p)?),
+                data: ProofData::Top(TopProof::try_from_proof(p)?),
             })
         } else if p.sub_layer_nodes() > 0 {
             Ok(MerkleProof {
-                data: ProofData::Sub(SubProof::new_from_proof(p)?),
+                data: ProofData::Sub(SubProof::try_from_proof(p)?),
             })
         } else {
             Ok(MerkleProof {
-                data: ProofData::Single(SingleProof::new_from_proof(p)?),
+                data: ProofData::Single(SingleProof::try_from_proof(p)?),
             })
         }
     }
@@ -474,10 +476,10 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> MerkleProofTrait for SingleProof
     type SubTreeArity = typenum::U0;
     type TopTreeArity = typenum::U0;
 
-    fn new_from_proof(
-        p: &proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
+    fn try_from_proof(
+        p: proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
     ) -> Result<Self> {
-        Ok(proof_to_single(p, 1, None))
+        Ok(proof_to_single(&p, 1, None))
     }
 
     fn verify(&self) -> bool {
@@ -534,8 +536,8 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
     type SubTreeArity = SubTreeArity;
     type TopTreeArity = typenum::U0;
 
-    fn new_from_proof(
-        p: &proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
+    fn try_from_proof(
+        p: proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
     ) -> Result<Self> {
         ensure!(
             p.sub_layer_nodes() == Self::SubTreeArity::to_usize(),
@@ -549,7 +551,7 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
 
         // Generate SubProof
         let base_proof = proof_to_single(base_p, 1, None);
-        let sub_proof = proof_to_single(p, 0, Some(base_p.root()));
+        let sub_proof = proof_to_single(&p, 0, Some(base_p.root()));
 
         Ok(SubProof::new(base_proof, sub_proof))
     }
@@ -638,8 +640,8 @@ impl<
     type SubTreeArity = SubTreeArity;
     type TopTreeArity = TopTreeArity;
 
-    fn new_from_proof(
-        p: &proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
+    fn try_from_proof(
+        p: proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
     ) -> Result<Self> {
         ensure!(
             p.top_layer_nodes() == Self::TopTreeArity::to_usize(),
@@ -669,7 +671,7 @@ impl<
             Some(base_p.root()),
         );
         let top_proof = proof_to_single::<Self::Hasher, Self::Arity, Self::TopTreeArity>(
-            p,
+            &p,
             0,
             Some(sub_p.root()),
         );
@@ -853,8 +855,8 @@ mod tests {
         .expect("Failed to build 2 layer tree");
 
         for i in 0..(leafs * SubTreeArity::to_usize()) {
-            let proof = SubProof::<H, BaseTreeArity, SubTreeArity>::new_from_proof(
-                &tree.gen_proof(i).unwrap(),
+            let proof = SubProof::<H, BaseTreeArity, SubTreeArity>::try_from_proof(
+                tree.gen_proof(i).unwrap(),
             )
             .expect("failed to build sub-proof");
             assert_eq!(proof.base_proof.root, proof.sub_proof.leaf);
@@ -921,8 +923,8 @@ mod tests {
         .expect("Failed to build 3 layer tree");
 
         for i in 0..(leafs * SubTreeArity::to_usize() * TopTreeArity::to_usize()) {
-            let proof = TopProof::<H, BaseTreeArity, SubTreeArity, TopTreeArity>::new_from_proof(
-                &tree.gen_proof(i).unwrap(),
+            let proof = TopProof::<H, BaseTreeArity, SubTreeArity, TopTreeArity>::try_from_proof(
+                tree.gen_proof(i).unwrap(),
             )
             .expect("failed to build top-proof");
 
