@@ -12,7 +12,7 @@ use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs::post::election::{ElectionPoSt, ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::post::fallback;
 
-use crate::constants::{DefaultBinaryTree, DefaultPieceHasher, DefaultTreeHasher};
+use crate::constants::{DefaultOctTree, DefaultPieceHasher, DefaultTreeHasher};
 use crate::parameters::{
     election_post_public_params, public_params, window_post_public_params,
     winning_post_public_params,
@@ -86,8 +86,8 @@ pub fn get_stacked_params(porep_config: PoRepConfig) -> Result<Arc<Bls12GrothPar
     )?;
 
     let parameters_generator = || {
-        <StackedCompound<DefaultBinaryTree, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<DefaultBinaryTree, DefaultPieceHasher>,
+        <StackedCompound<DefaultOctTree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<DefaultOctTree, DefaultPieceHasher>,
             _,
         >>::groth_params::<rand::rngs::OsRng>(None, &public_params)
         .map_err(Into::into)
@@ -127,8 +127,8 @@ pub fn get_post_params(post_config: &PoStConfig) -> Result<Arc<Bls12GrothParams>
             let post_public_params = winning_post_public_params(post_config)?;
 
             let parameters_generator = || {
-                <fallback::FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                    fallback::FallbackPoSt<DefaultTreeHasher>,
+                <fallback::FallbackPoStCompound<DefaultOctTree> as CompoundProof<
+                    fallback::FallbackPoSt<DefaultOctTree>,
                     fallback::FallbackPoStCircuit<DefaultTreeHasher>,
                 >>::groth_params::<rand::rngs::OsRng>(None, &post_public_params)
                 .map_err(Into::into)
@@ -146,8 +146,8 @@ pub fn get_post_params(post_config: &PoStConfig) -> Result<Arc<Bls12GrothParams>
             let post_public_params = window_post_public_params(post_config)?;
 
             let parameters_generator = || {
-                <fallback::FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                    fallback::FallbackPoSt<DefaultTreeHasher>,
+                <fallback::FallbackPoStCompound<DefaultOctTree> as CompoundProof<
+                    fallback::FallbackPoSt<DefaultOctTree>,
                     fallback::FallbackPoStCircuit<DefaultTreeHasher>,
                 >>::groth_params::<rand::rngs::OsRng>(None, &post_public_params)
                 .map_err(Into::into)
@@ -171,8 +171,8 @@ pub fn get_stacked_verifying_key(porep_config: PoRepConfig) -> Result<Arc<Bls12V
     )?;
 
     let vk_generator = || {
-        <StackedCompound<DefaultBinaryTree, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<DefaultBinaryTree, DefaultPieceHasher>,
+        <StackedCompound<DefaultOctTree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<DefaultOctTree, DefaultPieceHasher>,
             _,
         >>::verifying_key::<rand::rngs::OsRng>(None, &public_params)
         .map_err(Into::into)
@@ -212,8 +212,8 @@ pub fn get_post_verifying_key(post_config: &PoStConfig) -> Result<Arc<Bls12Verif
             let post_public_params = winning_post_public_params(post_config)?;
 
             let vk_generator = || {
-                <fallback::FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                    fallback::FallbackPoSt<DefaultTreeHasher>,
+                <fallback::FallbackPoStCompound<DefaultOctTree> as CompoundProof<
+                    fallback::FallbackPoSt<DefaultOctTree>,
                     fallback::FallbackPoStCircuit<DefaultTreeHasher>,
                 >>::verifying_key::<rand::rngs::OsRng>(None, &post_public_params)
                 .map_err(Into::into)
@@ -231,8 +231,8 @@ pub fn get_post_verifying_key(post_config: &PoStConfig) -> Result<Arc<Bls12Verif
             let post_public_params = window_post_public_params(post_config)?;
 
             let vk_generator = || {
-                <fallback::FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                    fallback::FallbackPoSt<DefaultTreeHasher>,
+                <fallback::FallbackPoStCompound<DefaultOctTree> as CompoundProof<
+                    fallback::FallbackPoSt<DefaultOctTree>,
                     fallback::FallbackPoStCircuit<DefaultTreeHasher>,
                 >>::verifying_key::<rand::rngs::OsRng>(None, &post_public_params)
                 .map_err(Into::into)

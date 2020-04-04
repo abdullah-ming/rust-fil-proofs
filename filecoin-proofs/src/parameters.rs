@@ -24,11 +24,8 @@ pub type WindowPostPublicParams = fallback::PublicParams;
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
-) -> Result<stacked::PublicParams<DefaultTreeHasher>> {
-    StackedDrg::<DefaultBinaryTree, DefaultPieceHasher>::setup(&setup_params(
-        sector_bytes,
-        partitions,
-    )?)
+) -> Result<stacked::PublicParams<DefaultOctTree>> {
+    StackedDrg::<_, DefaultPieceHasher>::setup(&setup_params(sector_bytes, partitions)?)
 }
 
 pub fn election_post_public_params(post_config: &PoStConfig) -> Result<ElectionPostPublicParams> {
@@ -44,7 +41,7 @@ pub fn election_post_setup_params(post_config: &PoStConfig) -> ElectionPostSetup
 }
 
 pub fn winning_post_public_params(post_config: &PoStConfig) -> Result<WinningPostPublicParams> {
-    fallback::FallbackPoSt::<DefaultTreeHasher>::setup(&winning_post_setup_params(&post_config)?)
+    fallback::FallbackPoSt::<DefaultOctTree>::setup(&winning_post_setup_params(&post_config)?)
 }
 
 pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPostSetupParams> {
@@ -72,7 +69,7 @@ pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPost
 }
 
 pub fn window_post_public_params(post_config: &PoStConfig) -> Result<WindowPostPublicParams> {
-    fallback::FallbackPoSt::<DefaultTreeHasher>::setup(&window_post_setup_params(&post_config))
+    fallback::FallbackPoSt::<DefaultOctTree>::setup(&window_post_setup_params(&post_config))
 }
 
 pub fn window_post_setup_params(post_config: &PoStConfig) -> WindowPostSetupParams {

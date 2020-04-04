@@ -4,7 +4,7 @@ use anyhow::Result;
 use storage_proofs::parameter_cache::{self, CacheableParameters};
 use storage_proofs::porep::stacked::{StackedCircuit, StackedCompound};
 
-use crate::constants::{DefaultBinaryTree, DefaultPieceHasher, DefaultTreeHasher};
+use crate::constants::{DefaultOctTree, DefaultPieceHasher};
 use crate::types::*;
 
 #[derive(Clone, Copy, Debug)]
@@ -48,8 +48,8 @@ impl PoRepConfig {
             crate::parameters::public_params(self.sector_size.into(), self.partitions.into())?;
 
         Ok(
-            <StackedCompound<DefaultBinaryTree, DefaultPieceHasher> as CacheableParameters<
-                StackedCircuit<DefaultBinaryTree, DefaultPieceHasher>,
+            <StackedCompound<DefaultOctTree, DefaultPieceHasher> as CacheableParameters<
+                StackedCircuit<DefaultOctTree, DefaultPieceHasher>,
                 _,
             >>::cache_identifier(&params),
         )

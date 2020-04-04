@@ -42,21 +42,21 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     .unwrap();
 
     {
-        let circuit = <StackedCompound<DefaultBinaryTree, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<DefaultBinaryTree, DefaultPieceHasher>,
+        let circuit = <StackedCompound<DefaultOctTree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<DefaultOctTree, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
-        let _ = StackedCompound::<DefaultBinaryTree, DefaultPieceHasher>::get_param_metadata(
+        let _ = StackedCompound::<DefaultOctTree, DefaultPieceHasher>::get_param_metadata(
             circuit,
             &public_params,
         );
     }
     {
-        let circuit = <StackedCompound<DefaultBinaryTree, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<DefaultBinaryTree, DefaultPieceHasher>,
+        let circuit = <StackedCompound<DefaultOctTree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<DefaultOctTree, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
-        StackedCompound::<DefaultBinaryTree, DefaultPieceHasher>::get_groth_params(
+        StackedCompound::<DefaultOctTree, DefaultPieceHasher>::get_groth_params(
             Some(&mut OsRng),
             circuit,
             &public_params,
@@ -64,12 +64,12 @@ fn cache_porep_params(porep_config: PoRepConfig) {
         .expect("failed to get groth params");
     }
     {
-        let circuit = <StackedCompound<DefaultBinaryTree, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<DefaultBinaryTree, DefaultPieceHasher>,
+        let circuit = <StackedCompound<DefaultOctTree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<DefaultOctTree, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
 
-        StackedCompound::<DefaultBinaryTree, DefaultPieceHasher>::get_verifying_key(
+        StackedCompound::<DefaultOctTree, DefaultPieceHasher>::get_verifying_key(
             Some(&mut OsRng),
             circuit,
             &public_params,
@@ -139,11 +139,11 @@ fn cache_winning_post_params(post_config: &PoStConfig) {
 
     {
         let post_circuit: FallbackPoStCircuit<DefaultTreeHasher> =
-            <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                FallbackPoSt<DefaultTreeHasher>,
+            <FallbackPoStCompound<DefaultOctTree> as CompoundProof<
+                FallbackPoSt<DefaultOctTree>,
                 FallbackPoStCircuit<DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
-        let _ = <FallbackPoStCompound<DefaultTreeHasher>>::get_param_metadata(
+        let _ = <FallbackPoStCompound<DefaultOctTree>>::get_param_metadata(
             post_circuit,
             &post_public_params,
         )
@@ -151,11 +151,11 @@ fn cache_winning_post_params(post_config: &PoStConfig) {
     }
     {
         let post_circuit: FallbackPoStCircuit<DefaultTreeHasher> =
-            <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                FallbackPoSt<DefaultTreeHasher>,
+            <FallbackPoStCompound<DefaultOctTree> as CompoundProof<
+                FallbackPoSt<DefaultOctTree>,
                 FallbackPoStCircuit<DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
-        <FallbackPoStCompound<DefaultTreeHasher>>::get_groth_params(
+        <FallbackPoStCompound<DefaultOctTree>>::get_groth_params(
             Some(&mut OsRng),
             post_circuit,
             &post_public_params,
@@ -164,12 +164,12 @@ fn cache_winning_post_params(post_config: &PoStConfig) {
     }
     {
         let post_circuit: FallbackPoStCircuit<DefaultTreeHasher> =
-            <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                FallbackPoSt<DefaultTreeHasher>,
+            <FallbackPoStCompound<DefaultOctTree> as CompoundProof<
+                FallbackPoSt<DefaultOctTree>,
                 FallbackPoStCircuit<DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
 
-        <FallbackPoStCompound<DefaultTreeHasher>>::get_verifying_key(
+        <FallbackPoStCompound<DefaultOctTree>>::get_verifying_key(
             Some(&mut OsRng),
             post_circuit,
             &post_public_params,
@@ -189,11 +189,11 @@ fn cache_window_post_params(post_config: &PoStConfig) {
 
     {
         let post_circuit: FallbackPoStCircuit<DefaultTreeHasher> =
-            <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                FallbackPoSt<DefaultTreeHasher>,
+            <FallbackPoStCompound<DefaultOctTree> as CompoundProof<
+                FallbackPoSt<DefaultOctTree>,
                 FallbackPoStCircuit<DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
-        let _ = <FallbackPoStCompound<DefaultTreeHasher>>::get_param_metadata(
+        let _ = <FallbackPoStCompound<DefaultOctTree>>::get_param_metadata(
             post_circuit,
             &post_public_params,
         )
@@ -201,11 +201,11 @@ fn cache_window_post_params(post_config: &PoStConfig) {
     }
     {
         let post_circuit: FallbackPoStCircuit<DefaultTreeHasher> =
-            <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                FallbackPoSt<DefaultTreeHasher>,
+            <FallbackPoStCompound<DefaultOctTree> as CompoundProof<
+                FallbackPoSt<DefaultOctTree>,
                 FallbackPoStCircuit<DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
-        <FallbackPoStCompound<DefaultTreeHasher>>::get_groth_params(
+        <FallbackPoStCompound<DefaultOctTree>>::get_groth_params(
             Some(&mut OsRng),
             post_circuit,
             &post_public_params,
@@ -214,12 +214,12 @@ fn cache_window_post_params(post_config: &PoStConfig) {
     }
     {
         let post_circuit: FallbackPoStCircuit<DefaultTreeHasher> =
-            <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                FallbackPoSt<DefaultTreeHasher>,
+            <FallbackPoStCompound<DefaultOctTree> as CompoundProof<
+                FallbackPoSt<DefaultOctTree>,
                 FallbackPoStCircuit<DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
 
-        <FallbackPoStCompound<DefaultTreeHasher>>::get_verifying_key(
+        <FallbackPoStCompound<DefaultOctTree>>::get_verifying_key(
             Some(&mut OsRng),
             post_circuit,
             &post_public_params,

@@ -50,7 +50,7 @@ use phase2::{verify_contribution, MPCParameters};
 use rand::SeedableRng;
 use simplelog::{self, CombinedLogger, LevelFilter, TermLogger, TerminalMode, WriteLogger};
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::hasher::{/*PedersenHasher,*/ PoseidonHasher, Sha256Hasher};
+use storage_proofs::hasher::Sha256Hasher;
 use storage_proofs::porep::stacked::{StackedCircuit, StackedCompound, StackedDrg};
 use storage_proofs::post::election::{ElectionPoSt, ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
@@ -240,7 +240,9 @@ fn blank_porep_sha_pedersen_circuit(
 }
 */
 
-fn blank_election_post_poseidon_circuit(sector_size: u64) -> ElectionPoStCircuit<PoseidonHasher> {
+fn blank_election_post_poseidon_circuit(
+    sector_size: u64,
+) -> ElectionPoStCircuit<DefaultTreeHasher> {
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size),
         challenge_count: ELECTION_POST_CHALLENGE_COUNT,
@@ -251,9 +253,9 @@ fn blank_election_post_poseidon_circuit(sector_size: u64) -> ElectionPoStCircuit
 
     let public_params = election_post_public_params(&post_config).unwrap();
 
-    <ElectionPoStCompound<PoseidonHasher> as CompoundProof<
-        ElectionPoSt<PoseidonHasher>,
-        ElectionPoStCircuit<PoseidonHasher>,
+    <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
+        ElectionPoSt<DefaultTreeHasher>,
+        ElectionPoStCircuit<DefaultTreeHasher>,
     >>::blank_circuit(&public_params)
 }
 
@@ -277,7 +279,7 @@ fn blank_election_post_sha_pedersen_circuit(
 }
 */
 
-fn blank_winning_post_poseidon_circuit(sector_size: u64) -> FallbackPoStCircuit<PoseidonHasher> {
+fn blank_winning_post_poseidon_circuit(sector_size: u64) -> FallbackPoStCircuit<DefaultTreeHasher> {
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size),
         challenge_count: WINNING_POST_CHALLENGE_COUNT,
@@ -288,13 +290,13 @@ fn blank_winning_post_poseidon_circuit(sector_size: u64) -> FallbackPoStCircuit<
 
     let public_params = winning_post_public_params(&post_config).unwrap();
 
-    <FallbackPoStCompound<PoseidonHasher> as CompoundProof<
-        FallbackPoSt<PoseidonHasher>,
-        FallbackPoStCircuit<PoseidonHasher>,
+    <FallbackPoStCompound<DefaultOctTree> as CompoundProof<
+        FallbackPoSt<DefaultOctTree>,
+        FallbackPoStCircuit<DefaultTreeHasher>,
     >>::blank_circuit(&public_params)
 }
 
-fn blank_window_post_poseidon_circuit(sector_size: u64) -> FallbackPoStCircuit<PoseidonHasher> {
+fn blank_window_post_poseidon_circuit(sector_size: u64) -> FallbackPoStCircuit<DefaultTreeHasher> {
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size),
         challenge_count: WINDOW_POST_CHALLENGE_COUNT,
@@ -309,9 +311,9 @@ fn blank_window_post_poseidon_circuit(sector_size: u64) -> FallbackPoStCircuit<P
 
     let public_params = window_post_public_params(&post_config).unwrap();
 
-    <FallbackPoStCompound<PoseidonHasher> as CompoundProof<
-        FallbackPoSt<PoseidonHasher>,
-        FallbackPoStCircuit<PoseidonHasher>,
+    <FallbackPoStCompound<DefaultOctTree> as CompoundProof<
+        FallbackPoSt<DefaultOctTree>,
+        FallbackPoStCircuit<DefaultTreeHasher>,
     >>::blank_circuit(&public_params)
 }
 /*

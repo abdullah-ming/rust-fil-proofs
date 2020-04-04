@@ -337,6 +337,10 @@ pub struct PersistentAux<D> {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TemporaryAux<Tree: MerkleTreeTrait, G: Hasher> {
     /// The encoded nodes for 1..layers.
+    #[serde(bound(
+        serialize = "StoreConfig: Serialize",
+        deserialize = "StoreConfig: Deserialize<'de>"
+    ))]
     pub labels: Labels<Tree>,
     pub tree_d_config: StoreConfig,
     pub tree_r_last_config: StoreConfig,
@@ -550,6 +554,10 @@ type VerifyCallback = fn(&StoreConfig, usize) -> Result<()>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Labels<Tree: MerkleTreeTrait> {
+    #[serde(bound(
+        serialize = "StoreConfig: Serialize",
+        deserialize = "StoreConfig: Deserialize<'de>"
+    ))]
     pub labels: Vec<StoreConfig>,
     pub _h: PhantomData<Tree>,
 }

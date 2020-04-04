@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use storage_proofs::hasher::Hasher;
 use storage_proofs::porep::stacked;
 
-use crate::constants::{DefaultPieceHasher, DefaultTreeDomain, DefaultTreeHasher};
+use crate::constants::*;
 
 mod bytes_amount;
 mod piece_info;
@@ -25,14 +25,14 @@ pub use self::sector_size::*;
 pub type Commitment = [u8; 32];
 pub type ChallengeSeed = [u8; 32];
 pub type PersistentAux = stacked::PersistentAux<DefaultTreeDomain>;
-pub type TemporaryAux = stacked::TemporaryAux<DefaultTreeHasher, DefaultPieceHasher>;
+pub type TemporaryAux = stacked::TemporaryAux<DefaultOctTree, DefaultPieceHasher>;
 pub type ProverId = [u8; 32];
 pub type Ticket = [u8; 32];
 
 pub type Tree = storage_proofs::merkle::OctMerkleTree<DefaultTreeHasher>;
 pub type LCTree = storage_proofs::merkle::OctLCMerkleTree<DefaultTreeHasher>;
 
-pub type Labels = storage_proofs::porep::stacked::Labels<DefaultTreeHasher>;
+pub type Labels = storage_proofs::porep::stacked::Labels<DefaultOctTree>;
 pub type DataTree = storage_proofs::merkle::BinaryMerkleTree<DefaultPieceHasher>;
 
 /// Arity for oct trees, used for comm_r_last.
@@ -48,7 +48,7 @@ pub struct SealPreCommitOutput {
 }
 
 pub type VanillaSealProof =
-    storage_proofs::porep::stacked::Proof<DefaultTreeHasher, DefaultPieceHasher>;
+    storage_proofs::porep::stacked::Proof<DefaultOctTree, DefaultPieceHasher>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SealCommitPhase1Output {

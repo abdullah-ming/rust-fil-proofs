@@ -5,7 +5,7 @@ use storage_proofs::parameter_cache::{self, CacheableParameters};
 use storage_proofs::post::election::{ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::post::fallback;
 
-use crate::constants::DefaultTreeHasher;
+use crate::constants::{DefaultOctTree, DefaultTreeHasher};
 use crate::types::*;
 
 #[derive(Clone, Debug)]
@@ -65,7 +65,7 @@ impl PoStConfig {
                 let params = crate::parameters::winning_post_public_params(self)?;
 
                 Ok(
-                    <fallback::FallbackPoStCompound<DefaultTreeHasher> as CacheableParameters<
+                    <fallback::FallbackPoStCompound<DefaultOctTree> as CacheableParameters<
                         fallback::FallbackPoStCircuit<DefaultTreeHasher>,
                         _,
                     >>::cache_identifier(&params),
@@ -75,7 +75,7 @@ impl PoStConfig {
                 let params = crate::parameters::window_post_public_params(self)?;
 
                 Ok(
-                    <fallback::FallbackPoStCompound<DefaultTreeHasher> as CacheableParameters<
+                    <fallback::FallbackPoStCompound<DefaultOctTree> as CacheableParameters<
                         fallback::FallbackPoStCircuit<DefaultTreeHasher>,
                         _,
                     >>::cache_identifier(&params),

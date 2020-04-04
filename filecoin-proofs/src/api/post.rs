@@ -511,7 +511,7 @@ pub fn generate_winning_post(
         partitions: None,
         priority: post_config.priority,
     };
-    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<DefaultTreeHasher>> =
+    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<DefaultOctTree>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;
     let groth_params = get_post_params(&post_config)?;
 
@@ -615,7 +615,7 @@ pub fn verify_winning_post(
         partitions: None,
         priority: false,
     };
-    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<DefaultTreeHasher>> =
+    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<DefaultOctTree>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;
 
     let verifying_key = get_post_verifying_key(&post_config)?;
@@ -698,7 +698,7 @@ pub fn generate_window_post(
         priority: post_config.priority,
     };
 
-    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<DefaultTreeHasher>> =
+    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<DefaultOctTree>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;
     let groth_params = get_post_params(&post_config)?;
 
@@ -778,7 +778,7 @@ pub fn verify_window_post(
         partitions,
         priority: false,
     };
-    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<DefaultTreeHasher>> =
+    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<DefaultOctTree>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;
 
     let verifying_key = get_post_verifying_key(&post_config)?;
