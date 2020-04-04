@@ -18,7 +18,7 @@ use storage_proofs::sector::SectorId;
 use crate::api::util::{as_safe_commitment, get_tree_size};
 use crate::commitment_reader::CommitmentReader;
 use crate::constants::{
-    DefaultPieceHasher, DefaultTreeHasher, DefaultBinaryTree,
+    DefaultBinaryTree, DefaultPieceHasher, DefaultTreeHasher,
     MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
 };
 use crate::fr32::write_unpadded;

@@ -1,7 +1,7 @@
 #![allow(clippy::len_without_is_empty)]
 
 use std::marker::PhantomData;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Result};
 use generic_array::typenum::{self, Unsigned, U0, U2, U4, U8};
@@ -43,12 +43,12 @@ pub const SECTOR_SIZE_32_KIB: u64 = 8 * SECTOR_SIZE_4_KIB;
 pub use merkletree::store::{ExternalReader, Store};
 
 pub type DiskStore<E> = merkletree::store::DiskStore<E>;
+pub type LCStore<E> = merkletree::store::LevelCacheStore<E, std::fs::File>;
 
 pub type MerkleStore<T> = DiskStore<T>;
 
 pub type DiskTree<H, U, V, W> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U, V, W>;
-pub type LCTree<H, U, V, W> =
-    MerkleTreeWrapper<H, LevelCacheStore<<H as Hasher>::Domain, std::fs::File>, U, V, W>;
+pub type LCTree<H, U, V, W> = MerkleTreeWrapper<H, LCStore<<H as Hasher>::Domain>, U, V, W>;
 
 pub type MerkleTree<H, U> = DiskTree<H, U, U0, U0>;
 pub type LCMerkleTree<H, U> = LCTree<H, U, U0, U0>;
@@ -1301,25 +1301,80 @@ impl<H: Hasher> std::ops::Deref for IncludedNode<H> {
     }
 }
 
-pub fn split_config(config: Option<StoreConfig>, count: usize) -> Result<Vec<Option<StoreConfig>>> {
-    match config {
-        Some(c) => {
-            let mut configs = Vec::with_capacity(count);
-            for i in 0..count {
-                configs.push(Some(StoreConfig::from_config(
-                    &c,
-                    format!("{}-{}", c.id, i),
-                    None,
-                )));
-            }
-            Ok(configs)
-        }
-        None => Ok(vec![None]),
+// Create a DiskTree from the provided config(s), each representing a 'base' layer tree with 'base_tree_len' elements.
+pub fn create_disk_tree<Tree: MerkleTreeTrait>(
+    base_tree_len: usize,
+    configs: &[StoreConfig],
+) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>> {
+    let base_tree_leafs = get_merkle_tree_leafs(base_tree_len, Tree::Arity::to_usize());
+
+    if Tree::TopTreeArity::to_usize() > 0 {
+        ensure!(
+            Tree::SubTreeArity::to_usize() > 0,
+            "Invalid top arity specified without sub arity"
+        );
+
+        Ok(DiskTree::from_sub_tree_store_configs(
+            base_tree_leafs,
+            configs,
+        )?)
+    } else if Tree::SubTreeArity::to_usize() > 0 {
+        ensure!(
+            configs.len() > 0,
+            "Cannot create sub-tree with a single tree config"
+        );
+
+        Ok(DiskTree::from_store_configs(base_tree_leafs, configs)?)
+    } else {
+        ensure!(configs.len() == 1, "Invalid tree-shape specified");
+        let store = DiskStore::new_from_disk(base_tree_len, Tree::Arity::to_usize(), &configs[0])?;
+
+        Ok(DiskTree::from_data_store(store, base_tree_leafs)?)
     }
 }
 
-/// Construct a new merkle tree.
-pub fn create_merkle_tree<Tree: MerkleTreeTrait>(
+// Create an LCTree from the provided config(s) and replica(s), each representing a 'base' layer tree with 'base_tree_len' elements.
+pub fn create_lc_tree<Tree: MerkleTreeTrait>(
+    base_tree_len: usize,
+    configs: &[StoreConfig],
+    replica_paths: &[PathBuf],
+) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>> {
+    let base_tree_leafs = get_merkle_tree_leafs(base_tree_len, Tree::Arity::to_usize());
+
+    if Tree::TopTreeArity::to_usize() > 0 {
+        ensure!(
+            Tree::SubTreeArity::to_usize() > 0,
+            "Invalid top arity specified without sub arity"
+        );
+
+        Ok(LCTree::from_sub_tree_store_configs_and_replicas(
+            base_tree_leafs,
+            configs,
+            replica_paths,
+        )?)
+    } else if Tree::SubTreeArity::to_usize() > 0 {
+        ensure!(
+            configs.len() > 0,
+            "Cannot create sub-tree with a single tree config"
+        );
+
+        Ok(LCTree::from_store_configs_and_replicas(
+            base_tree_leafs,
+            configs,
+            replica_paths,
+        )?)
+    } else {
+        ensure!(configs.len() == 1, "Invalid tree-shape specified");
+        let store = LCStore::new_from_disk(base_tree_len, Tree::Arity::to_usize(), &configs[0])?;
+
+        let mut tree = LCTree::from_data_store(store, base_tree_leafs)?;
+        tree.set_external_reader_path(&replica_paths[0])?;
+
+        Ok(tree)
+    }
+}
+
+pub fn create_base_merkle_tree<Tree: MerkleTreeTrait>(
     config: Option<StoreConfig>,
     size: usize,
     data: &[u8],
@@ -1458,6 +1513,105 @@ pub fn open_lcmerkle_tree<
     LCTree::from_data_store(tree_store, size)
 }
 
+// Given a StoreConfig, generate additional ones with appended numbers
+// to uniquely identify them and return the results.  If count is 1,
+// the original config is not modified.
+pub fn split_config(config: StoreConfig, count: usize) -> Result<Vec<StoreConfig>> {
+    if count == 1 {
+        return Ok(vec![config.clone()]);
+    }
+
+    let mut configs = Vec::with_capacity(count);
+    for i in 0..count {
+        configs.push(StoreConfig::from_config(
+            &config,
+            format!("{}-{}", config.id, i),
+            None,
+        ));
+        configs[i].levels = config.levels;
+    }
+
+    Ok(configs)
+}
+
+// Given a StoreConfig, generate additional ones with appended numbers
+// to uniquely identify them and return the results.  If count is 1,
+// the original config is not modified.
+//
+// Useful for testing, where there the config may be None.
+pub fn split_config_wrapped(
+    config: Option<StoreConfig>,
+    count: usize,
+) -> Result<Vec<Option<StoreConfig>>> {
+    if count == 1 {
+        return Ok(vec![config]);
+    }
+
+    match config {
+        Some(c) => {
+            let mut configs = Vec::with_capacity(count);
+            for i in 0..count {
+                configs.push(Some(StoreConfig::from_config(
+                    &c,
+                    format!("{}-{}", c.id, i),
+                    None,
+                )));
+            }
+            Ok(configs)
+        }
+        None => Ok(vec![None]),
+    }
+}
+
+// Given a StoreConfig and replica path, append numbers to each to
+// uniquely identify them and return the results.  If count is 1, the
+// original config and replica path are not modified.
+pub fn split_config_and_replica(
+    config: StoreConfig,
+    replica_path: PathBuf,
+    count: usize,
+) -> Result<(Vec<StoreConfig>, Vec<PathBuf>)> {
+    if count == 1 {
+        return Ok((vec![config.clone()], vec![replica_path]));
+    }
+
+    let mut configs = Vec::with_capacity(count);
+    let mut replica_paths = Vec::with_capacity(count);
+
+    for i in 0..count {
+        configs.push(StoreConfig::from_config(
+            &config,
+            format!("{}-{}", config.id, i),
+            None,
+        ));
+        configs[i].levels = config.levels;
+
+        replica_paths.push(
+            Path::new(
+                format!("{:?}-{}", replica_path, i)
+                    .replace("\"", "")
+                    .as_str(),
+            )
+            .to_path_buf(),
+        );
+    }
+
+    Ok((configs, replica_paths))
+}
+
+// FIXME: double check this is correct
+pub fn get_base_tree_count<Tree: MerkleTreeTrait>() -> usize {
+    if Tree::TopTreeArity::to_usize() == 0 && Tree::SubTreeArity::to_usize() == 0 {
+        return 1;
+    }
+
+    if Tree::TopTreeArity::to_usize() > 0 {
+        Tree::TopTreeArity::to_usize() * Tree::SubTreeArity::to_usize()
+    } else {
+        Tree::SubTreeArity::to_usize()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1507,9 +1661,7 @@ mod tests {
         SubTreeArity: 'static + PoseidonArity,
     >() {
         let leafs = 64;
-        let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed()).unwrap();
         let mut rng = rand::thread_rng();
-        let node_size = 32;
         let mut data = Vec::new();
         for _ in 0..leafs {
             let elt: H::Domain = H::Domain::random(&mut rng);
@@ -1517,7 +1669,7 @@ mod tests {
         }
 
         let mut trees = Vec::with_capacity(SubTreeArity::to_usize());
-        for i in 0..SubTreeArity::to_usize() {
+        for _ in 0..SubTreeArity::to_usize() {
             trees.push(
                 merkletree::merkle::MerkleTree::<
                     H::Domain,

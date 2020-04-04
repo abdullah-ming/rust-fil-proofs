@@ -26,7 +26,8 @@ use storage_proofs::sector::SectorId;
 use crate::api::util::{as_safe_commitment, commitment_from_fr, get_tree_size};
 use crate::caches::{get_stacked_params, get_stacked_verifying_key};
 use crate::constants::{
-    DefaultPieceHasher, DefaultTreeHasher, DefaultBinaryTree, DefaultOctTree, POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN,
+    DefaultBinaryTree, DefaultOctTree, DefaultPieceHasher, DefaultTreeHasher,
+    POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN,
 };
 use crate::parameters::setup_params;
 pub use crate::pieces;

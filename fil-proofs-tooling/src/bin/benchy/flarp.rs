@@ -1,6 +1,6 @@
 use bellperson::Circuit;
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::constants::{DefaultTreeHasher, DefaultBinaryTree, POREP_PARTITIONS};
+use filecoin_proofs::constants::{DefaultBinaryTree, DefaultTreeHasher, POREP_PARTITIONS};
 use filecoin_proofs::parameters::election_post_public_params;
 use filecoin_proofs::types::PaddedBytesAmount;
 use filecoin_proofs::types::*;

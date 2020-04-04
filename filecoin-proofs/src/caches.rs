@@ -12,7 +12,7 @@ use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs::post::election::{ElectionPoSt, ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::post::fallback;
 
-use crate::constants::{DefaultPieceHasher, DefaultTreeHasher, DefaultBinaryTree};
+use crate::constants::{DefaultBinaryTree, DefaultPieceHasher, DefaultTreeHasher};
 use crate::parameters::{
     election_post_public_params, public_params, window_post_public_params,
     winning_post_public_params,

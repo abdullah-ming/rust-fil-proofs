@@ -4,7 +4,7 @@ use anyhow::Result;
 use storage_proofs::parameter_cache::{self, CacheableParameters};
 use storage_proofs::porep::stacked::{StackedCircuit, StackedCompound};
 
-use crate::constants::{DefaultPieceHasher, DefaultTreeHasher, DefaultBinaryTree};
+use crate::constants::{DefaultBinaryTree, DefaultPieceHasher, DefaultTreeHasher};
 use crate::types::*;
 
 #[derive(Clone, Copy, Debug)]

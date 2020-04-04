@@ -29,7 +29,7 @@ use crate::error::Result;
 use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::measurements::{
     measure_op,
-    Operation::{CommD, EncodeWindowTimeAll},
+    Operation::{CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast},
 };
 use crate::merkle::*;
 use crate::porep::PoRep;
@@ -386,59 +386,33 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         data: &Data,
         tree_count: usize,
         leafs: usize,
-        replica_path: &PathBuf,
-    ) -> Result<Vec<PathBuf>> {
+        replica_paths: &[PathBuf],
+    ) -> Result<()> {
         use std::fs::OpenOptions;
         use std::io::prelude::*;
         use std::path::Path;
 
-        if tree_count == 1 {
-            // Store and persist encoded replica data.
+        let mut start = 0;
+        let mut end = leafs;
+
+        //ensure!(replica_paths.len() == tree_count, "Replica path and tree count mis-match");
+        assert_eq!(replica_paths.len(), tree_count);
+
+        // Store and persist encoded replica data.
+        for i in 0..tree_count {
             let mut f = OpenOptions::new()
                 .write(true)
                 .create(true)
-                .open(&replica_path)?;
+                .open(&replica_paths[i])?;
 
             // Only write the replica's base layer of leaf data.
-            trace!("Writing replica data for {} nodes", leafs);
-
-            f.write_all(&data.as_ref()[0..leafs * NODE_SIZE])?;
-
-            Ok(vec![replica_path.to_path_buf()])
-        } else {
-            // Store and persist encoded replica data.
-            let mut replica_paths = Vec::with_capacity(tree_count);
-            let mut start = 0;
-            let mut end = leafs * NODE_SIZE;
-
-            for i in 0..tree_count {
-                replica_paths.push(
-                    Path::new(
-                        format!("{:?}-{}", replica_path, i)
-                            .replace("\"", "")
-                            .as_str(),
-                    )
-                    .to_path_buf(),
-                );
-                let mut f = OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .open(&replica_paths[i])?;
-
-                // Only write the replica's base layer of leaf data.
-                trace!(
-                    "Writing replica data for {} nodes [{}-{}]",
-                    leafs,
-                    start,
-                    end
-                );
-                f.write_all(&data.as_ref()[start..end])?;
-                start = end;
-                end += leafs * NODE_SIZE;
-            }
-
-            Ok(replica_paths)
+            trace!("Writing replica data for {} nodes {}-{}", leafs, start, end);
+            f.write_all(&data.as_ref()[start..end])?;
+            start = end;
+            end += leafs;
         }
+
+        Ok(())
     }
 
     pub(crate) fn transform_and_replicate_layers_inner(
@@ -456,309 +430,197 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         assert_eq!(data.len(), nodes_count * NODE_SIZE);
         trace!("nodes count {}, data len {}", nodes_count, data.len());
 
-        let transform_and_replicate = |tree_count| -> Result<(_, _, _, _, _, _)> {
-            let nodes_count = graph.size() / tree_count;
+        let tree_count = get_base_tree_count::<Tree>();
+        let nodes_count = graph.size() / tree_count;
 
-            // Ensure that the node count will work for binary and oct arities.
-            trace!(
-                "is_merkle_tree_size_valid({}, BINARY_ARITY) = {}",
-                nodes_count,
-                is_merkle_tree_size_valid(nodes_count, BINARY_ARITY)
-            );
-            trace!(
-                "is_merkle_tree_size_valid({}, OCT_ARITY) = {}",
-                nodes_count,
-                is_merkle_tree_size_valid(nodes_count, Tree::Arity::to_usize())
-            );
-            assert!(is_merkle_tree_size_valid(nodes_count, BINARY_ARITY));
-            assert!(is_merkle_tree_size_valid(
-                nodes_count,
-                Tree::Arity::to_usize()
-            ));
+        // Ensure that the node count will work for binary and oct arities.
+        trace!(
+            "is_merkle_tree_size_valid({}, BINARY_ARITY) = {}",
+            nodes_count,
+            is_merkle_tree_size_valid(nodes_count, BINARY_ARITY)
+        );
+        trace!(
+            "is_merkle_tree_size_valid({}, OCT_ARITY) = {}",
+            nodes_count,
+            is_merkle_tree_size_valid(nodes_count, Tree::SubTreeArity::to_usize())
+        );
+        assert!(is_merkle_tree_size_valid(nodes_count, BINARY_ARITY));
+        assert!(is_merkle_tree_size_valid(
+            nodes_count,
+            Tree::SubTreeArity::to_usize()
+        ));
 
-            let layers = layer_challenges.layers();
-            assert!(layers > 0);
+        let layers = layer_challenges.layers();
+        assert!(layers > 0);
 
-            // Generate all store configs that we need based on the
-            // cache_path in the specified config.
-            let mut tree_d_config = StoreConfig::from_config(
-                &config,
-                CacheKey::CommDTree.to_string(),
-                Some(get_merkle_tree_len(nodes_count, BINARY_ARITY)?),
-            );
-            tree_d_config.levels =
-                StoreConfig::default_cached_above_base_layer(nodes_count, BINARY_ARITY);
+        // Generate all store configs that we need based on the
+        // cache_path in the specified config.
+        let mut tree_d_config = StoreConfig::from_config(
+            &config,
+            CacheKey::CommDTree.to_string(),
+            Some(get_merkle_tree_len(nodes_count, BINARY_ARITY)?),
+        );
+        tree_d_config.levels =
+            StoreConfig::default_cached_above_base_layer(nodes_count, BINARY_ARITY);
 
-            let mut tree_r_last_config = StoreConfig::from_config(
-                &config,
-                CacheKey::CommRLastTree.to_string(),
-                Some(get_merkle_tree_len(nodes_count, Tree::Arity::to_usize())?),
-            );
-            tree_r_last_config.levels =
-                StoreConfig::default_cached_above_base_layer(nodes_count, Tree::Arity::to_usize());
+        let mut tree_r_last_config = StoreConfig::from_config(
+            &config,
+            CacheKey::CommRLastTree.to_string(),
+            Some(get_merkle_tree_len(nodes_count, Tree::Arity::to_usize())?),
+        );
+        tree_r_last_config.levels =
+            StoreConfig::default_cached_above_base_layer(nodes_count, Tree::Arity::to_usize());
 
-            let mut tree_c_config = StoreConfig::from_config(
-                &config,
-                CacheKey::CommCTree.to_string(),
-                Some(get_merkle_tree_len(nodes_count, Tree::Arity::to_usize())?),
-            );
-            tree_c_config.levels =
-                StoreConfig::default_cached_above_base_layer(nodes_count, Tree::Arity::to_usize());
+        let mut tree_c_config = StoreConfig::from_config(
+            &config,
+            CacheKey::CommCTree.to_string(),
+            Some(get_merkle_tree_len(nodes_count, Tree::Arity::to_usize())?),
+        );
+        tree_c_config.levels =
+            StoreConfig::default_cached_above_base_layer(nodes_count, Tree::Arity::to_usize());
 
-            let labels = LabelsCache::<Tree>::new(&label_configs)?;
+        let labels = LabelsCache::<Tree>::new(&label_configs)?;
+        let configs = split_config(tree_c_config.clone(), tree_count)?;
 
-            // Build the tree for CommC
-            // FIXME: Removed "measure_op(GenerateTreeC" closure, as it wasn't building
-            let tree_c_root: Result<<Tree::Hasher as Hasher>::Domain> = {
-                info!("Building column hashes");
+        // Build the tree for CommC
+        let tree_c = measure_op(GenerateTreeC, || {
+            info!("Building column hashes");
 
-                let configs = split_config(Some(tree_c_config.clone()), tree_count)?;
-                let mut trees = Vec::with_capacity(tree_count);
+            let mut trees = Vec::with_capacity(tree_count);
 
-                for i in 0..tree_count {
-                    let mut hashes: Vec<<Tree::Hasher as Hasher>::Domain> =
-                        vec![<Tree::Hasher as Hasher>::Domain::default(); nodes_count];
+            for i in 0..tree_count {
+                let mut hashes: Vec<<Tree::Hasher as Hasher>::Domain> =
+                    vec![<Tree::Hasher as Hasher>::Domain::default(); nodes_count];
 
-                    rayon::scope(|s| {
-                        // spawn n = num_cpus * 2 threads
-                        let n = num_cpus::get() * 2;
+                rayon::scope(|s| {
+                    // spawn n = num_cpus * 2 threads
+                    let n = num_cpus::get() * 2;
 
-                        // only split if we have at least two elements per thread
-                        let num_chunks = if n > nodes_count * 2 { 1 } else { n };
+                    // only split if we have at least two elements per thread
+                    let num_chunks = if n > nodes_count * 2 { 1 } else { n };
 
-                        // chunk into n chunks
-                        let chunk_size = (nodes_count as f64 / num_chunks as f64).ceil() as usize;
+                    // chunk into n chunks
+                    let chunk_size = (nodes_count as f64 / num_chunks as f64).ceil() as usize;
 
-                        // calculate all n chunks in parallel
-                        for (chunk, hashes_chunk) in hashes.chunks_mut(chunk_size).enumerate() {
-                            let labels = &labels;
+                    // calculate all n chunks in parallel
+                    for (chunk, hashes_chunk) in hashes.chunks_mut(chunk_size).enumerate() {
+                        let labels = &labels;
 
-                            s.spawn(move |_| {
-                                for (j, hash) in hashes_chunk.iter_mut().enumerate() {
-                                    let data: Vec<_> = (1..=layers)
-                                        .map(|layer| {
-                                            let store = labels.labels_for_layer(layer);
-                                            let el: <Tree::Hasher as Hasher>::Domain = store
-                                                .read_at((i * nodes_count) + j + chunk * chunk_size)
-                                                .unwrap();
-                                            el.into()
-                                        })
-                                        .collect();
+                        s.spawn(move |_| {
+                            for (j, hash) in hashes_chunk.iter_mut().enumerate() {
+                                let data: Vec<_> = (1..=layers)
+                                    .map(|layer| {
+                                        let store = labels.labels_for_layer(layer);
+                                        let el: <Tree::Hasher as Hasher>::Domain =
+                                            store.read_at(j + chunk * chunk_size).unwrap();
+                                        el.into()
+                                    })
+                                    .collect();
 
-                                    *hash = hash_single_column(&data).into();
-                                }
-                            });
-                        }
+                                *hash = hash_single_column(&data).into();
+                            }
+                        });
+                    }
+                });
+
+                info!("building base tree_c {}/{}", i + 1, tree_count);
+                trees.push(DiskTree::<
+                    Tree::Hasher,
+                    Tree::Arity,
+                    typenum::U0,
+                    typenum::U0,
+                >::from_par_iter_with_config(
+                    hashes.into_par_iter(),
+                    configs[i].clone(),
+                )?);
+            }
+
+            assert_eq!(tree_count, trees.len());
+            create_disk_tree::<
+                DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+            >(tree_c_config.size.unwrap(), &configs)
+        })?;
+        info!("tree_c done");
+        let tree_c_root = tree_c.root();
+        drop(tree_c);
+
+        // Build the MerkleTree over the original data (if needed).
+        let tree_d = match data_tree {
+            Some(t) => {
+                trace!("using existing original data merkle tree");
+                assert_eq!(t.len(), 2 * (data.len() / NODE_SIZE) - 1);
+
+                t
+            }
+            None => {
+                trace!("building merkle tree for the original data");
+                data.ensure_data()?;
+                measure_op(CommD, || {
+                    Self::build_binary_tree::<G>(data.as_ref(), tree_d_config.clone())
+                })?
+            }
+        };
+        tree_d_config.size = Some(tree_d.len());
+        assert_eq!(tree_d_config.size.unwrap(), tree_d.len());
+        let tree_d_root = tree_d.root();
+        drop(tree_d);
+
+        // Encode original data into the last layer.
+        info!("building tree_r_last");
+        let (configs, replica_paths) =
+            split_config_and_replica(tree_r_last_config.clone(), replica_path, tree_count)?;
+
+        let tree_r_last = measure_op(GenerateTreeRLast, || {
+            data.ensure_data()?;
+
+            let last_layer_labels = labels.labels_for_last_layer()?;
+            let size = Store::len(last_layer_labels);
+
+            let mut trees = Vec::with_capacity(tree_count);
+            let mut start = 0;
+            let mut end = size / tree_count;
+
+            for i in 0..tree_count {
+                let encoded_data = last_layer_labels
+                    .read_range(start..end)?
+                    .into_par_iter()
+                    .zip(
+                        data.as_mut()[(start * NODE_SIZE)..(end * NODE_SIZE)]
+                            .par_chunks_mut(NODE_SIZE),
+                    )
+                    .map(|(key, data_node_bytes)| {
+                        let data_node =
+                            <Tree::Hasher as Hasher>::Domain::try_from_bytes(data_node_bytes)
+                                .unwrap();
+                        let encoded_node =
+                            encode::<<Tree::Hasher as Hasher>::Domain>(key, data_node);
+                        data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
+
+                        encoded_node
                     });
 
-                    info!("building tree_c");
-                    assert!(configs[i].is_some());
-                    trees.push(OctMerkleTree::<Tree::Hasher>::from_par_iter_with_config(
-                        hashes.into_par_iter(),
-                        if tree_count == 1 {
-                            tree_c_config.clone()
-                        } else {
-                            configs[i].as_ref().unwrap().clone()
-                        },
-                    )?);
-                }
+                info!("building base tree_r_last {}/{}", i + 1, tree_count);
+                trees.push(LCTree::<Tree::Hasher, Tree::Arity, typenum::U0, typenum::U0>::from_par_iter_with_config(encoded_data, configs[i].clone())?);
 
-                assert_eq!(tree_count, trees.len());
-
-                if tree_count == 1 {
-                    let tree_c = &trees[0];
-                    tree_c_config.size = Some(tree_c.len());
-
-                    Ok(tree_c.root())
-                } else if tree_count == 16 {
-                    tree_c_config.size = Some(trees[0].len());
-
-                    // Build a top level tree consisting of sub_tree_count (i.e. 2) sub_trees, each of (tree_count / sub_tree_count) base layer trees.
-                    let tree_c = OctTopMerkleTree::<Tree::Hasher>::from_sub_trees_as_trees(trees)?;
-
-                    Ok(tree_c.root())
-                } else {
-                    assert!(tree_count == 2 || tree_count == 8 || tree_count == 16);
-                    tree_c_config.size = Some(trees[0].len());
-                    let tree_c = OctSubMerkleTree::<Tree::Hasher>::from_trees(trees)?;
-
-                    Ok(tree_c.root())
-                }
-            };
-            info!("tree_c done");
-
-            // Build the MerkleTree over the original data (if needed).
-            let tree_d = match data_tree {
-                Some(t) => {
-                    trace!("using existing original data merkle tree");
-                    assert_eq!(t.len(), 2 * (data.len() / NODE_SIZE) - 1);
-
-                    t
-                }
-                None => {
-                    trace!("building merkle tree for the original data");
-                    data.ensure_data()?;
-                    measure_op(CommD, || {
-                        Self::build_binary_tree::<G>(data.as_ref(), tree_d_config.clone())
-                    })?
-                }
-            };
-            tree_d_config.size = Some(tree_d.len());
-            assert_eq!(tree_d_config.size.unwrap(), tree_d.len());
-            let tree_d_root = tree_d.root();
-            drop(tree_d);
-
-            // Encode original data into the last layer.
-            info!("building tree_r_last");
-            // FIXME: Removed "measure_op(GenerateTreeRLast" closure, as it wasn't building
-            let tree_r_last_root: Result<<Tree::Hasher as Hasher>::Domain> = {
-                data.ensure_data()?;
-
-                let last_layer_labels = labels.labels_for_last_layer()?;
-                let size = Store::len(last_layer_labels);
-
-                let mut trees = Vec::with_capacity(tree_count);
-                let mut start = 0;
-                let mut end = size / tree_count;
-
-                let configs = split_config(Some(tree_r_last_config.clone()), tree_count)?;
-                for config in &configs {
-                    let encoded_data = last_layer_labels
-                        .read_range(start..end)?
-                        .into_par_iter()
-                        .zip(
-                            data.as_mut()[(start * NODE_SIZE)..(end * NODE_SIZE)]
-                                .par_chunks_mut(NODE_SIZE),
-                        )
-                        .map(|(key, data_node_bytes)| {
-                            let data_node =
-                                <Tree::Hasher as Hasher>::Domain::try_from_bytes(data_node_bytes)
-                                    .unwrap();
-                            let encoded_node =
-                                encode::<<Tree::Hasher as Hasher>::Domain>(key, data_node);
-                            data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
-
-                            encoded_node
-                        });
-
-                    assert!(config.is_some());
-                    trees.push(OctLCMerkleTree::<Tree::Hasher>::from_par_iter_with_config(
-                        encoded_data,
-                        if tree_count == 1 {
-                            tree_r_last_config.clone()
-                        } else {
-                            config.as_ref().unwrap().clone()
-                        },
-                    )?);
-
-                    start = end;
-                    end += size / tree_count;
-                }
-
-                if tree_count == 1 {
-                    // In this case, tree_r_last is already complete.
-                    let tree_r_last = &trees[0];
-                    tree_r_last_config.size = Some(tree_r_last.len());
-                    assert_eq!(tree_r_last_config.size.unwrap(), tree_r_last.len());
-
-                    Self::write_replica_data(
-                        &data,
-                        tree_count,
-                        tree_r_last.leafs(),
-                        &replica_path,
-                    )?;
-
-                    Ok(tree_r_last.root())
-                } else if tree_count == 16 {
-                    // Note: Given the shape of OctLCTopTree, a tree count
-                    // of 16 will yield 2 top layer trees, each consisting
-                    // of 8 sub layer trees.
-                    let leafs = trees[0].leafs();
-                    assert_eq!((leafs * NODE_SIZE) * tree_count, data.len());
-                    tree_r_last_config.size = Some(trees[0].len());
-
-                    let unwrapped_configs = {
-                        let mut c = Vec::with_capacity(tree_count);
-                        for i in 0..tree_count {
-                            c.push(configs[i].as_ref().unwrap().clone());
-                            c[i].levels = configs[i].as_ref().unwrap().levels;
-                        }
-
-                        c
-                    };
-                    let replica_paths =
-                        Self::write_replica_data(&data, tree_count, leafs, &replica_path)?;
-
-                    let tree_r_last =
-                        OctLCTopMerkleTree::<Tree::Hasher>::from_sub_tree_store_configs_and_replicas(
-                            leafs,
-                            &unwrapped_configs,
-                            &replica_paths,
-                        )?;
-
-                    Ok(tree_r_last.root())
-                } else {
-                    // In this case, construct the compound tree_r_last from the sub-trees we have.
-                    assert!(tree_count == 2 || tree_count == 8);
-                    let leafs = trees[0].leafs();
-                    assert_eq!((leafs * NODE_SIZE) * tree_count, data.len());
-                    tree_r_last_config.size = Some(trees[0].len());
-
-                    let unwrapped_configs = {
-                        let mut c = Vec::with_capacity(tree_count);
-                        for i in 0..tree_count {
-                            c.push(configs[i].as_ref().unwrap().clone());
-                            c[i].levels = configs[i].as_ref().unwrap().levels;
-                        }
-
-                        c
-                    };
-                    let replica_paths =
-                        Self::write_replica_data(&data, tree_count, leafs, &replica_path)?;
-
-                    let tree_r_last =
-                        OctLCSubMerkleTree::<Tree::Hasher>::from_store_configs_and_replicas(
-                            leafs,
-                            &unwrapped_configs,
-                            &replica_paths,
-                        )?;
-
-                    Ok(tree_r_last.root())
-                }
-            };
-            info!("tree_r_last done");
-
-            data.drop_data();
-
-            Ok((
-                tree_d_config,
-                tree_c_config,
-                tree_r_last_config,
-                tree_d_root,
-                tree_c_root?,
-                tree_r_last_root?,
-            ))
-        };
-
-        let sector_size = (nodes_count * NODE_SIZE) as u64;
-        let (
-            tree_d_config,
-            tree_c_config,
-            tree_r_last_config,
-            tree_d_root,
-            tree_c_root,
-            tree_r_last_root,
-        ) = match sector_size {
-            SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB => {
-                transform_and_replicate(1)
+                start = end;
+                end += size / tree_count;
             }
-            SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB => {
-                transform_and_replicate(2)
-            }
-            SECTOR_SIZE_32_GIB => transform_and_replicate(8),
-            SECTOR_SIZE_32_KIB | SECTOR_SIZE_64_GIB => transform_and_replicate(16),
-            _ => panic!("Unsupported data len"),
-        }?;
+
+            assert_eq!(tree_count, trees.len());
+
+            let leafs = trees[0].leafs();
+            Self::write_replica_data(&data, tree_count, leafs, &replica_paths)?;
+
+            create_lc_tree::<
+                LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+            >(tree_r_last_config.size.unwrap(), &configs, &replica_paths)
+        })?;
+        info!("tree_r_last done");
+
+        let tree_r_last_root = tree_r_last.root();
+        drop(tree_r_last);
+
+        data.drop_data();
 
         // comm_r = H(comm_c || comm_r_last)
         let comm_r: <Tree::Hasher as Hasher>::Domain =
@@ -857,8 +719,18 @@ mod tests {
     }
 
     #[test]
-    fn extract_all_pedersen() {
+    fn extract_all_pedersen_2() {
         test_extract_all::<BinaryMerkleTree<PedersenHasher>>();
+    }
+
+    #[test]
+    fn extract_all_pedersen_8_2() {
+        test_extract_all::<OctSubMerkleTree<PedersenHasher>>();
+    }
+
+    #[test]
+    fn extract_all_pedersen_8_8_2() {
+        test_extract_all::<OctTopMerkleTree<PedersenHasher>>();
     }
 
     #[test]
@@ -872,8 +744,18 @@ mod tests {
     }
 
     #[test]
-    fn extract_all_poseidon() {
+    fn extract_all_poseidon_2() {
         test_extract_all::<BinaryMerkleTree<PoseidonHasher>>();
+    }
+
+    #[test]
+    fn extract_all_poseidon_8_2() {
+        test_extract_all::<OctSubMerkleTree<PoseidonHasher>>();
+    }
+
+    #[test]
+    fn extract_all_poseidon_8_8_2() {
+        test_extract_all::<OctTopMerkleTree<PoseidonHasher>>();
     }
 
     fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
@@ -884,7 +766,13 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let replica_id: <Tree::Hasher as Hasher>::Domain =
             <Tree::Hasher as Hasher>::Domain::random(rng);
-        let nodes = 64;
+        let nodes = if Tree::TopTreeArity::to_usize() > 0 {
+            64 * Tree::SubTreeArity::to_usize() * Tree::TopTreeArity::to_usize()
+        } else if Tree::SubTreeArity::to_usize() > 0 {
+            64 * Tree::SubTreeArity::to_usize()
+        } else {
+            64
+        };
 
         let data: Vec<u8> = (0..nodes)
             .flat_map(|_| {

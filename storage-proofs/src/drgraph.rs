@@ -13,7 +13,7 @@ use crate::error::*;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Hasher, PoseidonArity};
 use crate::merkle::{
-    create_lcmerkle_tree, create_merkle_tree, open_lcmerkle_tree, LCMerkleTree, LCTree,
+    create_base_merkle_tree, create_lcmerkle_tree, open_lcmerkle_tree, LCMerkleTree, LCTree,
     MerkleTreeTrait,
 };
 use crate::parameter_cache::ParameterSetMetadata;
@@ -41,7 +41,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         config: Option<StoreConfig>,
         data: &'a [u8],
     ) -> Result<Tree> {
-        create_merkle_tree::<Tree>(config, self.size(), data)
+        create_base_merkle_tree::<Tree>(config, self.size(), data)
     }
 
     /// Builds a merkle tree based on the given data and level cache

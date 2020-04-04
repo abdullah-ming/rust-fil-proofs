@@ -19,7 +19,7 @@ use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::*;
 use storage_proofs::gadgets::BenchCS;
 use storage_proofs::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, Sha256Hasher};
-use storage_proofs::merkle::{MerkleTreeTrait, BinaryMerkleTree};
+use storage_proofs::merkle::{BinaryMerkleTree, MerkleTreeTrait};
 use storage_proofs::porep::stacked::StackedCompound;
 use storage_proofs::porep::stacked::{
     self, ChallengeRequirements, LayerChallenges, StackedDrg, TemporaryAuxCache, BINARY_ARITY,
@@ -163,14 +163,15 @@ where
                 wall_time: replication_wall_time,
                 return_value: (pub_inputs, priv_inputs),
             } = measure(|| {
-                let (tau, (p_aux, t_aux)) = StackedDrg::<BinaryMerkleTree<H>, Sha256Hasher>::replicate(
-                    &pp,
-                    &replica_id,
-                    (&mut data[..]).into(),
-                    None,
-                    store_config.clone(),
-                    replica_path.clone(),
-                )?;
+                let (tau, (p_aux, t_aux)) =
+                    StackedDrg::<BinaryMerkleTree<H>, Sha256Hasher>::replicate(
+                        &pp,
+                        &replica_id,
+                        (&mut data[..]).into(),
+                        None,
+                        store_config.clone(),
+                        replica_path.clone(),
+                    )?;
 
                 let pb = stacked::PublicInputs::<H::Domain, <Sha256Hasher as Hasher>::Domain> {
                     replica_id,
@@ -246,11 +247,12 @@ where
 
             for _ in 0..*samples {
                 let m = measure(|| {
-                    let verified = StackedDrg::<BinaryMerkleTree<H>, Sha256Hasher>::verify_all_partitions(
-                        &pp,
-                        &pub_inputs,
-                        &all_partition_proofs,
-                    )?;
+                    let verified =
+                        StackedDrg::<BinaryMerkleTree<H>, Sha256Hasher>::verify_all_partitions(
+                            &pp,
+                            &pub_inputs,
+                            &all_partition_proofs,
+                        )?;
 
                     if !verified {
                         panic!("verification failed");
@@ -374,10 +376,12 @@ fn do_circuit_work<Tree: 'static + MerkleTreeTrait>(
         // We should implement a method of CompoundProof, which will skip vanilla proving.
         // We should also allow the serialized vanilla proofs to be passed (as a file) to the example
         // and skip replication/vanilla-proving entirely.
-        let gparams =
-            <StackedCompound<_, _> as CompoundProof<StackedDrg<Tree, Sha256Hasher>, _>>::groth_params::<
-                rand::rngs::OsRng,
-            >(None, &compound_public_params.vanilla_params)?;
+        let gparams = <StackedCompound<_, _> as CompoundProof<
+            StackedDrg<Tree, Sha256Hasher>,
+            _,
+        >>::groth_params::<rand::rngs::OsRng>(
+            None, &compound_public_params.vanilla_params
+        )?;
 
         let multi_proof = {
             let FuncMeasurement {
