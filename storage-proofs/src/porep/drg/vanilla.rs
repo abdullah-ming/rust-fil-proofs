@@ -130,7 +130,7 @@ where
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DataProof<H: Hasher, U: typenum::Unsigned> {
+pub struct DataProof<H: Hasher, U: PoseidonArity> {
     #[serde(bound(
         serialize = "MerkleProof<H, U>: Serialize",
         deserialize = "MerkleProof<H, U>: Deserialize<'de>"

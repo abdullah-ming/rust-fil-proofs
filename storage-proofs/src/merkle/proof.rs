@@ -155,12 +155,12 @@ pub struct PathElement<H: Hasher> {
 }
 
 /// Representation of a merkle proof.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MerkleProof<
     H: Hasher,
-    BaseArity: Unsigned,
-    SubTreeArity: Unsigned = U0,
-    TopTreeArity: Unsigned = U0,
+    BaseArity: PoseidonArity,
+    SubTreeArity: PoseidonArity = U0,
+    TopTreeArity: PoseidonArity = U0,
 > {
     #[serde(bound(
         serialize = "H::Domain: Serialize",
@@ -227,18 +227,13 @@ impl<
     }
 }
 
-impl<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned, TopTreeArity: Unsigned> std::fmt::Debug
-    for MerkleProof<H, BaseArity, SubTreeArity, TopTreeArity>
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MerkleProof")
-            .field("data", &self.data)
-            .finish()
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-enum ProofData<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned, TopTreeArity: Unsigned> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum ProofData<
+    H: Hasher,
+    BaseArity: PoseidonArity,
+    SubTreeArity: PoseidonArity,
+    TopTreeArity: PoseidonArity,
+> {
     #[serde(bound(
         serialize = "H::Domain: Serialize",
         deserialize = "H::Domain: Deserialize<'de>"
@@ -256,20 +251,8 @@ enum ProofData<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned, TopTreeAr
     Top(TopProof<H, BaseArity, SubTreeArity, TopTreeArity>),
 }
 
-impl<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned, TopTreeArity: Unsigned> std::fmt::Debug
-    for ProofData<H, BaseArity, SubTreeArity, TopTreeArity>
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ProofData::Single(ref proof) => write!(f, "ProofData::Single({:?})", proof),
-            ProofData::Sub(ref proof) => write!(f, "ProofData::Sub({:?})", proof),
-            ProofData::Top(ref proof) => write!(f, "ProofData::Top({:?})", proof),
-        }
-    }
-}
-
-#[derive(Default, Clone, Serialize, Deserialize)]
-struct SingleProof<H: Hasher, Arity: Unsigned> {
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+struct SingleProof<H: Hasher, Arity: PoseidonArity> {
     /// Root of the merkle tree.
     #[serde(bound(
         serialize = "H::Domain: Serialize",
@@ -294,19 +277,7 @@ struct SingleProof<H: Hasher, Arity: Unsigned> {
     a: PhantomData<Arity>,
 }
 
-impl<H: Hasher, Arity: Unsigned> std::fmt::Debug for SingleProof<H, Arity> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SingleProof")
-            .field("root", &self.root)
-            .field("leaf", &self.leaf)
-            .field("path", &self.path)
-            .field("Hasher", &H::name())
-            .field("Arity", &Arity::to_usize())
-            .finish()
-    }
-}
-
-impl<H: Hasher, Arity: Unsigned> SingleProof<H, Arity> {
+impl<H: Hasher, Arity: PoseidonArity> SingleProof<H, Arity> {
     pub fn new(root: H::Domain, leaf: H::Domain, path: Vec<PathElement<H>>) -> Self {
         SingleProof {
             root,
@@ -318,8 +289,8 @@ impl<H: Hasher, Arity: Unsigned> SingleProof<H, Arity> {
     }
 }
 
-#[derive(Default, Clone, Serialize, Deserialize)]
-struct SubProof<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned> {
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+struct SubProof<H: Hasher, BaseArity: PoseidonArity, SubTreeArity: PoseidonArity> {
     #[serde(bound(
         serialize = "H::Domain: Serialize",
         deserialize = "H::Domain: Deserialize<'de>"
@@ -336,18 +307,9 @@ struct SubProof<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned> {
     b: PhantomData<SubTreeArity>,
 }
 
-impl<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned> std::fmt::Debug
-    for SubProof<H, BaseArity, SubTreeArity>
+impl<H: Hasher, BaseArity: PoseidonArity, SubTreeArity: PoseidonArity>
+    SubProof<H, BaseArity, SubTreeArity>
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SubProof")
-            .field("base_proof", &self.base_proof)
-            .field("sub_proof", &self.sub_proof)
-            .finish()
-    }
-}
-
-impl<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned> SubProof<H, BaseArity, SubTreeArity> {
     pub fn new(
         base_proof: SingleProof<H, BaseArity>,
         sub_proof: SingleProof<H, SubTreeArity>,
@@ -361,8 +323,13 @@ impl<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned> SubProof<H, BaseAri
     }
 }
 
-#[derive(Default, Clone, Serialize, Deserialize)]
-struct TopProof<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned, TopTreeArity: Unsigned> {
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+struct TopProof<
+    H: Hasher,
+    BaseArity: PoseidonArity,
+    SubTreeArity: PoseidonArity,
+    TopTreeArity: PoseidonArity,
+> {
     #[serde(bound(
         serialize = "H::Domain: Serialize",
         deserialize = "H::Domain: Deserialize<'de>"
@@ -384,20 +351,12 @@ struct TopProof<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned, TopTreeA
     c: PhantomData<TopTreeArity>,
 }
 
-impl<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned, TopTreeArity: Unsigned> std::fmt::Debug
-    for TopProof<H, BaseArity, SubTreeArity, TopTreeArity>
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TopProof")
-            .field("base_proof", &self.base_proof)
-            .field("sub_proof", &self.sub_proof)
-            .field("top_proof", &self.top_proof)
-            .finish()
-    }
-}
-
-impl<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned, TopTreeArity: Unsigned>
-    TopProof<H, BaseArity, SubTreeArity, TopTreeArity>
+impl<
+        H: Hasher,
+        BaseArity: PoseidonArity,
+        SubTreeArity: PoseidonArity,
+        TopTreeArity: PoseidonArity,
+    > TopProof<H, BaseArity, SubTreeArity, TopTreeArity>
 {
     pub fn new(
         base_proof: SingleProof<H, BaseArity>,
@@ -416,9 +375,9 @@ impl<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned, TopTreeArity: Unsig
 
 impl<
         H: Hasher,
-        BaseArity: typenum::Unsigned,
-        SubTreeArity: typenum::Unsigned,
-        TopTreeArity: typenum::Unsigned,
+        BaseArity: PoseidonArity,
+        SubTreeArity: PoseidonArity,
+        TopTreeArity: PoseidonArity,
     > MerkleProof<H, BaseArity, SubTreeArity, TopTreeArity>
 {
     pub fn new(n: usize) -> Self {
@@ -436,7 +395,7 @@ impl<
 }
 
 /// Converts a merkle_light proof to a SingleProof
-fn proof_to_single<H: Hasher, Arity: Unsigned, TargetArity: Unsigned>(
+fn proof_to_single<H: Hasher, Arity: PoseidonArity, TargetArity: PoseidonArity>(
     proof: &proof::Proof<H::Domain, Arity>,
     lemma_start_index: usize,
     sub_root: Option<H::Domain>,
