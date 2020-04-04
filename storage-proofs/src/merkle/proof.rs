@@ -95,7 +95,7 @@ pub trait MerkleProofTrait:
     }
 }
 
-pub fn compound_path_length<A: Unsigned, B: Unsigned, C: Unsigned>(leaves: usize) -> usize {
+pub fn base_path_length<A: Unsigned, B: Unsigned, C: Unsigned>(leaves: usize) -> usize {
     let leaves = if C::to_usize() > 0 {
         leaves / C::to_usize() / B::to_usize()
     } else if B::to_usize() > 0 {
@@ -104,8 +104,11 @@ pub fn compound_path_length<A: Unsigned, B: Unsigned, C: Unsigned>(leaves: usize
         leaves
     };
 
-    let mut len = graph_height::<A>(leaves) - 1;
+    graph_height::<A>(leaves) - 1
+}
 
+pub fn compound_path_length<A: Unsigned, B: Unsigned, C: Unsigned>(leaves: usize) -> usize {
+    let mut len = base_path_length::<A, B, C>(leaves);
     if B::to_usize() > 0 {
         len += 1;
     }

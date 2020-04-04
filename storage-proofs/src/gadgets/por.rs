@@ -14,7 +14,7 @@ use crate::gadgets::constraint;
 use crate::gadgets::insertion::insert;
 use crate::gadgets::variables::Root;
 use crate::hasher::{HashFunction, Hasher, PoseidonArity};
-use crate::merkle::{compound_path_length, MerkleProofTrait, MerkleTreeTrait};
+use crate::merkle::{base_path_length, compound_path_length, MerkleProofTrait, MerkleTreeTrait};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por::PoR;
 use crate::proof::ProofScheme;
@@ -185,6 +185,12 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> SubPath<H, Arity> {
 
 impl<Tree: 'static + MerkleTreeTrait> AuthPath<Tree> {
     fn blank(public_params: &<PoR<Tree> as ProofScheme<'_>>::PublicParams) -> Self {
+        let has_sub = Tree::SubTreeArity::to_usize() > 0;
+        let has_top = Tree::TopTreeArity::to_usize() > 0;
+        let base_elements = base_path_length::<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>(
+            public_params.leaves,
+        );
+
         let base = vec![
             PathElement::<Tree::Hasher, Tree::Arity> {
                 hashes: vec![None; Tree::Arity::to_usize() - 1],
@@ -192,10 +198,10 @@ impl<Tree: 'static + MerkleTreeTrait> AuthPath<Tree> {
                 _a: Default::default(),
                 _h: Default::default(),
             };
-            graph_height::<Tree::Arity>(public_params.leaves) - 1
+            base_elements
         ];
 
-        let sub = if Tree::SubTreeArity::to_usize() > 0 {
+        let sub = if has_sub {
             vec![PathElement::<Tree::Hasher, Tree::SubTreeArity> {
                 hashes: vec![None; Tree::SubTreeArity::to_usize() - 1],
                 index: None,
@@ -206,7 +212,7 @@ impl<Tree: 'static + MerkleTreeTrait> AuthPath<Tree> {
             Vec::new()
         };
 
-        let top = if Tree::TopTreeArity::to_usize() > 0 {
+        let top = if has_top {
             vec![PathElement::<Tree::Hasher, Tree::TopTreeArity> {
                 hashes: vec![None; Tree::TopTreeArity::to_usize() - 1],
                 index: None,
@@ -509,14 +515,13 @@ impl<'a, Tree: MerkleTreeTrait> PoRCircuit<Tree> {
 mod tests {
     use super::*;
 
-    use crate::proof::NoRequirements;
     use bellperson::gadgets::multipack;
     use ff::Field;
-    use rand::{Rng, SeedableRng};
-    use rand_xorshift::XorShiftRng;
-
     use merkletree::merkle::{is_merkle_tree_size_valid, FromIndexedParallelIterator, MerkleTree};
     use merkletree::store::VecStore;
+    use pretty_assertions::assert_eq;
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
 
     use crate::compound_proof;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
@@ -528,6 +533,7 @@ mod tests {
     };
     use crate::merkle::{BinaryMerkleTree, DiskStore, MerkleProofTrait, MerkleTreeWrapper};
     use crate::por;
+    use crate::proof::NoRequirements;
     use crate::proof::ProofScheme;
     use crate::util::data_at_node;
 
@@ -628,17 +634,40 @@ mod tests {
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
-    fn por_test_compound() {
+    fn por_test_compound_poseidon_base_8() {
+        por_compound::<TestTree<PoseidonHasher, typenum::U8>>();
+    }
+
+    fn por_compound<Tree: 'static + MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
-        let leaves = 64; // good for 2, 4 and 8
+        let arity = Tree::Arity::to_usize();
+        assert_eq!(1, arity.count_ones());
+
+        let sub_arity = Tree::SubTreeArity::to_usize();
+        if sub_arity > 0 {
+            assert_eq!(1, sub_arity.count_ones());
+        }
+
+        let top_arity = Tree::TopTreeArity::to_usize();
+        if top_arity > 0 {
+            assert_eq!(1, top_arity.count_ones());
+        }
+
+        let mut leaves = 64; // good for 2, 4 and 8
+
+        if sub_arity > 0 {
+            leaves *= sub_arity;
+        }
+
+        if top_arity > 0 {
+            leaves *= top_arity;
+        }
 
         let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
-        let graph = BucketGraph::<PedersenHasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree = graph
-            .merkle_tree::<BinaryMerkleTree<PedersenHasher>>(None, data.as_slice())
-            .unwrap();
+        let graph = BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
+        let tree = graph.merkle_tree::<Tree>(None, data.as_slice()).unwrap();
 
         let public_inputs = por::PublicInputs {
             challenge: 2,
@@ -653,45 +682,30 @@ mod tests {
             partitions: None,
             priority: false,
         };
-        let public_params = PoRCompound::<BinaryMerkleTree<PedersenHasher>>::setup(&setup_params)
-            .expect("setup failed");
+        let public_params = PoRCompound::<Tree>::setup(&setup_params).expect("setup failed");
 
-        let private_inputs = por::PrivateInputs::<BinaryMerkleTree<PedersenHasher>>::new(
+        let private_inputs = por::PrivateInputs::<Tree>::new(
             bytes_into_fr(data_at_node(data.as_slice(), public_inputs.challenge).unwrap())
                 .expect("failed to create Fr from node data")
                 .into(),
             &tree,
         );
 
-        let gparams = PoRCompound::<BinaryMerkleTree<PedersenHasher>>::groth_params(
-            Some(rng),
-            &public_params.vanilla_params,
-        )
-        .expect("failed to generate groth params");
+        let gparams = PoRCompound::<Tree>::groth_params(Some(rng), &public_params.vanilla_params)
+            .expect("failed to generate groth params");
 
-        let proof = PoRCompound::<BinaryMerkleTree<PedersenHasher>>::prove(
-            &public_params,
-            &public_inputs,
-            &private_inputs,
-            &gparams,
-        )
-        .expect("failed while proving");
+        let proof =
+            PoRCompound::<Tree>::prove(&public_params, &public_inputs, &private_inputs, &gparams)
+                .expect("failed while proving");
 
-        let verified = PoRCompound::<BinaryMerkleTree<PedersenHasher>>::verify(
-            &public_params,
-            &public_inputs,
-            &proof,
-            &NoRequirements,
-        )
-        .expect("failed while verifying");
+        let verified =
+            PoRCompound::<Tree>::verify(&public_params, &public_inputs, &proof, &NoRequirements)
+                .expect("failed while verifying");
         assert!(verified);
 
-        let (circuit, inputs) = PoRCompound::<BinaryMerkleTree<PedersenHasher>>::circuit_for_test(
-            &public_params,
-            &public_inputs,
-            &private_inputs,
-        )
-        .unwrap();
+        let (circuit, inputs) =
+            PoRCompound::<Tree>::circuit_for_test(&public_params, &public_inputs, &private_inputs)
+                .unwrap();
 
         let mut cs = TestConstraintSystem::new();
 
@@ -1122,7 +1136,28 @@ mod tests {
     fn test_private_por_input_circuit<Tree: MerkleTreeTrait>(num_constraints: usize) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 64; // good for 2, 4 and 8
+        let arity = Tree::Arity::to_usize();
+        assert_eq!(1, arity.count_ones());
+
+        let sub_arity = Tree::SubTreeArity::to_usize();
+        if sub_arity > 0 {
+            assert_eq!(1, sub_arity.count_ones());
+        }
+
+        let top_arity = Tree::TopTreeArity::to_usize();
+        if top_arity > 0 {
+            assert_eq!(1, top_arity.count_ones());
+        }
+
+        let mut leaves = 64; // good for 2, 4 and 8
+
+        if sub_arity > 0 {
+            leaves *= sub_arity;
+        }
+
+        if top_arity > 0 {
+            leaves *= top_arity;
+        }
 
         for i in 0..leaves {
             // -- Basic Setup
