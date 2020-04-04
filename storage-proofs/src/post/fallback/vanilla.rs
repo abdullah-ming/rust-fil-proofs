@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use anyhow::{ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
-use generic_array::typenum::{self, Unsigned, U8};
+use generic_array::typenum::{self, Unsigned};
 use log::trace;
 use merkletree::store::StoreConfig;
 use rayon::prelude::*;
@@ -12,9 +12,7 @@ use sha2::{Digest, Sha256};
 use crate::drgraph::graph_height;
 use crate::error::Result;
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{
-    MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper, OctLCMerkleTree,
-};
+use crate::merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::ProofScheme;
 use crate::sector::*;
@@ -482,7 +480,9 @@ mod tests {
         total_sector_count: usize,
         sector_count: usize,
         partitions: usize,
-    ) {
+    ) where
+        Tree::Store: 'static,
+    {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let arity = Tree::Arity::to_usize();
@@ -533,7 +533,8 @@ mod tests {
         let mut trees = Vec::new();
 
         for i in 0..total_sector_count {
-            let (_data, tree) = generate_tree::<Tree, _>(rng, leaves);
+            let (_data, tree) =
+                generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
             trees.push(tree);
         }
         for (i, tree) in trees.iter().enumerate() {

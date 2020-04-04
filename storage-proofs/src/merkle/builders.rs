@@ -330,28 +330,82 @@ pub type ResTree<Tree> = MerkleTreeWrapper<
 >;
 
 #[cfg(test)]
+use std::io::Write;
+
+#[cfg(test)]
 fn generate_base_tree<R: rand::Rng, Tree: MerkleTreeTrait>(
     rng: &mut R,
     nodes: usize,
-) -> (Vec<u8>, ResTree<Tree>) {
+    temp_path: Option<PathBuf>,
+) -> (Vec<u8>, ResTree<Tree>)
+where
+    Tree::Store: 'static,
+{
     let elements = (0..nodes)
         .map(|_| <Tree::Hasher as Hasher>::Domain::random(rng))
         .collect::<Vec<_>>();
+
     let mut data = Vec::new();
     for el in &elements {
         data.extend_from_slice(AsRef::<[u8]>::as_ref(el));
     }
-    (
-        data,
-        MerkleTreeWrapper::try_from_iter(elements.iter().map(|v| Ok(*v))).unwrap(),
-    )
+
+    if let Some(ref temp_path) = temp_path {
+        let id: u64 = rng.gen();
+        let replica_path = temp_path.join(format!("replica-path-{}", id));
+        let mut f = std::fs::File::create(&replica_path).unwrap();
+        f.write_all(&data).unwrap();
+        let config = StoreConfig::new(
+            &temp_path,
+            format!("test-lc-tree-{}", id),
+            Tree::Arity::to_usize(),
+        );
+
+        let mut tree =
+            MerkleTreeWrapper::try_from_iter_with_config(elements.iter().map(|v| (Ok(*v))), config)
+                .unwrap();
+
+        {
+            // Beware: evil dynamic downcasting RUST MAGIC down below.
+            use std::any::Any;
+
+            if let Some(lc_tree) = Any::downcast_mut::<
+                merkle::MerkleTree<
+                    <Tree::Hasher as Hasher>::Domain,
+                    <Tree::Hasher as Hasher>::Function,
+                    merkletree::store::LevelCacheStore<
+                        <Tree::Hasher as Hasher>::Domain,
+                        std::fs::File,
+                    >,
+                    Tree::Arity,
+                    Tree::SubTreeArity,
+                    Tree::TopTreeArity,
+                >,
+            >(&mut tree.inner)
+            {
+                dbg!("Using LC Tree");
+                lc_tree.set_external_reader_path(&replica_path).unwrap();
+            }
+        }
+
+        (data, tree)
+    } else {
+        (
+            data,
+            MerkleTreeWrapper::try_from_iter(elements.iter().map(|v| Ok(*v))).unwrap(),
+        )
+    }
 }
 
 #[cfg(test)]
 fn generate_sub_tree<R: rand::Rng, Tree: MerkleTreeTrait>(
     rng: &mut R,
     nodes: usize,
-) -> (Vec<u8>, ResTree<Tree>) {
+    temp_path: Option<PathBuf>,
+) -> (Vec<u8>, ResTree<Tree>)
+where
+    Tree::Store: 'static,
+{
     let base_tree_count = Tree::SubTreeArity::to_usize();
     let base_tree_size = nodes / base_tree_count;
     let mut trees = Vec::with_capacity(base_tree_count);
@@ -361,10 +415,11 @@ fn generate_sub_tree<R: rand::Rng, Tree: MerkleTreeTrait>(
         let (inner_data, tree) = generate_base_tree::<
             R,
             MerkleTreeWrapper<Tree::Hasher, Tree::Store, Tree::Arity>,
-        >(rng, base_tree_size);
+        >(rng, base_tree_size, temp_path.clone());
         trees.push(tree);
         data.extend(inner_data);
     }
+
     (data, MerkleTreeWrapper::from_trees(trees).unwrap())
 }
 
@@ -372,7 +427,11 @@ fn generate_sub_tree<R: rand::Rng, Tree: MerkleTreeTrait>(
 pub fn generate_tree<Tree: MerkleTreeTrait, R: rand::Rng>(
     rng: &mut R,
     nodes: usize,
-) -> (Vec<u8>, ResTree<Tree>) {
+    temp_path: Option<PathBuf>,
+) -> (Vec<u8>, ResTree<Tree>)
+where
+    Tree::Store: 'static,
+{
     let sub_tree_arity = Tree::SubTreeArity::to_usize();
     let top_tree_arity = Tree::TopTreeArity::to_usize();
 
@@ -394,7 +453,7 @@ pub fn generate_tree<Tree: MerkleTreeTrait, R: rand::Rng>(
                     Tree::SubTreeArity,
                     typenum::U0,
                 >,
-            >(rng, nodes / top_tree_arity);
+            >(rng, nodes / top_tree_arity, temp_path.clone());
 
             sub_trees.push(tree);
             data.extend(inner_data);
@@ -402,9 +461,9 @@ pub fn generate_tree<Tree: MerkleTreeTrait, R: rand::Rng>(
         (data, MerkleTreeWrapper::from_sub_trees(sub_trees).unwrap())
     } else {
         if sub_tree_arity > 0 {
-            generate_sub_tree::<R, Tree>(rng, nodes)
+            generate_sub_tree::<R, Tree>(rng, nodes, temp_path)
         } else {
-            generate_base_tree::<R, Tree>(rng, nodes)
+            generate_base_tree::<R, Tree>(rng, nodes, temp_path)
         }
     }
 }

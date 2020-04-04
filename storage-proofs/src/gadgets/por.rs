@@ -4,7 +4,7 @@ use anyhow::ensure;
 use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
 use bellperson::gadgets::{multipack, num};
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use generic_array::typenum::{self, Unsigned};
+use generic_array::typenum::Unsigned;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
@@ -706,7 +706,7 @@ mod tests {
         }
 
         // -- Basic Setup
-        let (data, tree) = generate_tree::<Tree, _>(rng, leaves);
+        let (data, tree) = generate_tree::<Tree, _>(rng, leaves, None);
 
         for i in 0..leaves {
             println!("challenge: {}, ({})", i, leaves);
@@ -866,7 +866,7 @@ mod tests {
         }
 
         // -- Basic Setup
-        let (data, tree) = generate_tree::<Tree, _>(rng, leaves);
+        let (data, tree) = generate_tree::<Tree, _>(rng, leaves, None);
 
         for i in 0..3 {
             let public_inputs = por::PublicInputs {

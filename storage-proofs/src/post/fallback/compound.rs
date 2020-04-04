@@ -248,7 +248,8 @@ mod tests {
         let mut trees = Vec::new();
 
         for i in 0..total_sector_count {
-            let (_data, tree) = generate_tree::<OctMerkleTree<H>, _>(rng, leaves);
+            let (_data, tree) =
+                generate_tree::<OctMerkleTree<H>, _>(rng, leaves, Some(temp_path.to_path_buf()));
             trees.push(tree);
         }
         for (i, tree) in trees.iter().enumerate() {
