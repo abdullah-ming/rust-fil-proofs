@@ -726,6 +726,27 @@ mod tests {
     }
 
     #[test]
+    fn test_por_circuit_pedersen_sub_8_2() {
+        test_por_circuit::<TestTree2<PedersenHasher, typenum::U8, typenum::U2>>(4, 1_455);
+    }
+
+    #[test]
+    fn test_por_circuit_pedersen_top_8_4_2() {
+        test_por_circuit::<TestTree3<PedersenHasher, typenum::U8, typenum::U4, typenum::U2>>(
+            5, 24_869,
+        );
+    }
+
+    #[test]
+    fn test_por_circuit_pedersen_top_8_2_4() {
+        // We can handle top-heavy trees with a non-zero subtree arity.
+        // These should never be produced, though.
+        test_por_circuit::<TestTree3<PedersenHasher, typenum::U8, typenum::U2, typenum::U4>>(
+            5, 24_869,
+        );
+    }
+
+    #[test]
     fn test_por_circuit_blake2s_base_4() {
         test_por_circuit::<TestTree<Blake2sHasher, typenum::U4>>(3, 130_308);
     }
@@ -773,8 +794,23 @@ mod tests {
     }
 
     #[test]
-    fn test_por_circuit_poseidon_top_8_0_4() {
-        test_por_circuit::<TestTree3<PoseidonHasher, typenum::U8, typenum::U0, typenum::U4>>(
+    fn test_por_circuit_poseidon_top_8_8() {
+        // This is the shape we want for 32GiB sectors.
+        test_por_circuit::<TestTree2<PoseidonHasher, typenum::U8, typenum::U8>>(4, 1_705);
+    }
+    #[test]
+    fn test_por_circuit_poseidon_top_8_8_2() {
+        // This is the shape we want for 64GiB secotrs.
+        test_por_circuit::<TestTree3<PoseidonHasher, typenum::U8, typenum::U8, typenum::U2>>(
+            5, 2_023,
+        );
+    }
+
+    #[test]
+    fn test_por_circuit_poseidon_top_8_2_4() {
+        // We can handle top-heavy trees with a non-zero subtree arity.
+        // These should never be produced, though.
+        test_por_circuit::<TestTree3<PoseidonHasher, typenum::U8, typenum::U2, typenum::U4>>(
             5, 1_850,
         );
     }
@@ -799,7 +835,6 @@ mod tests {
         }
 
         // Ensure arity will evenly fill tree.
-        //        let leaves = 64;
         let mut leaves = 64; // good for 2, 4 and 8
 
         if sub_arity > 0 {
@@ -888,37 +923,90 @@ mod tests {
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
-    fn test_private_por_compound_pedersen_binary() {
+    fn test_private_por_compound_pedersen_base_2() {
         private_por_test_compound::<TestTree<PedersenHasher, typenum::U2>>();
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
-    fn test_private_por_compound_poseidon_binary() {
-        private_por_test_compound::<TestTree<PoseidonHasher, typenum::U2>>();
-    }
-
-    #[ignore] // Slow test – run only when compiled for release.
-    #[test]
-    fn test_private_por_compound_pedersen_quad() {
+    fn test_private_por_compound_pedersen_base_4() {
         private_por_test_compound::<TestTree<PedersenHasher, typenum::U4>>();
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
-    fn test_private_por_compound_poseidon_quad() {
+    fn test_private_por_compound_poseidon_base_2() {
+        private_por_test_compound::<TestTree<PoseidonHasher, typenum::U2>>();
+    }
+
+    #[ignore] // Slow test – run only when compiled for release.
+    #[test]
+    fn test_private_por_compound_poseidon_base_4() {
         private_por_test_compound::<TestTree<PoseidonHasher, typenum::U4>>();
+    }
+
+    #[ignore] // Slow test – run only when compiled for release.
+    #[test]
+    fn test_private_por_compound_poseidon_sub_8_2() {
+        private_por_test_compound::<TestTree2<PoseidonHasher, typenum::U8, typenum::U2>>();
+    }
+
+    #[ignore] // Slow test – run only when compiled for release.
+    #[test]
+    fn test_private_por_compound_poseidon_top_8_4_2() {
+        private_por_test_compound::<TestTree3<PoseidonHasher, typenum::U8, typenum::U4, typenum::U2>>(
+        );
+    }
+
+    #[ignore] // Slow test – run only when compiled for release.
+    #[test]
+    fn test_private_por_compound_poseidon_top_8_8() {
+        private_por_test_compound::<TestTree2<PoseidonHasher, typenum::U8, typenum::U8>>();
+    }
+
+    #[ignore] // Slow test – run only when compiled for release.
+    #[test]
+    fn test_private_por_compound_poseidon_top_8_8_2() {
+        private_por_test_compound::<TestTree3<PoseidonHasher, typenum::U8, typenum::U8, typenum::U2>>(
+        );
+    }
+
+    #[ignore] // Slow test – run only when compiled for release.
+    #[test]
+    fn test_private_por_compound_poseidon_top_8_2_4() {
+        private_por_test_compound::<TestTree3<PoseidonHasher, typenum::U8, typenum::U2, typenum::U4>>(
+        );
     }
 
     fn private_por_test_compound<Tree: 'static + MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
-        let leaves = 64; // good for 2, 4 and 8
 
-        let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
-            .collect();
-        let graph = BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree = graph.merkle_tree::<Tree>(None, data.as_slice()).unwrap();
+        let arity = Tree::Arity::to_usize();
+        assert_eq!(1, arity.count_ones());
+
+        let sub_arity = Tree::SubTreeArity::to_usize();
+        if sub_arity > 0 {
+            assert_eq!(1, sub_arity.count_ones());
+        }
+
+        let top_arity = Tree::TopTreeArity::to_usize();
+        if top_arity > 0 {
+            assert_eq!(1, top_arity.count_ones());
+        }
+
+        // Ensure arity will evenly fill tree.
+        let mut leaves = 64; // good for 2, 4 and 8
+
+        if sub_arity > 0 {
+            leaves *= sub_arity;
+        }
+
+        if top_arity > 0 {
+            leaves *= top_arity;
+        }
+
+        // -- Basic Setup
+        let (data, tree) = generate_tree::<Tree, _>(rng, leaves);
 
         for i in 0..3 {
             let public_inputs = por::PublicInputs {
@@ -934,9 +1022,10 @@ mod tests {
                 partitions: None,
                 priority: false,
             };
-            let public_params = PoRCompound::<Tree>::setup(&setup_params).expect("setup failed");
+            let public_params =
+                PoRCompound::<ResTree<Tree>>::setup(&setup_params).expect("setup failed");
 
-            let private_inputs = por::PrivateInputs::<Tree>::new(
+            let private_inputs = por::PrivateInputs::<ResTree<Tree>>::new(
                 bytes_into_fr(data_at_node(data.as_slice(), public_inputs.challenge).unwrap())
                     .expect("failed to create Fr from node data")
                     .into(),
@@ -963,14 +1052,14 @@ mod tests {
                     "verification failed with TestContraintSystem and generated inputs"
                 );
             }
-
+            // NOTE: This diagnostic code currently fails, even though the proof generated from the blank circuit verifies.
             // Use this to debug differences between blank and regular circuit generation.
             {
                 let (circuit1, _inputs) =
                     PoRCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
                         .unwrap();
                 let blank_circuit =
-                    PoRCompound::<Tree>::blank_circuit(&public_params.vanilla_params);
+                    PoRCompound::<ResTree<Tree>>::blank_circuit(&public_params.vanilla_params);
 
                 let mut cs_blank = MetricCS::new();
                 blank_circuit
@@ -988,9 +1077,11 @@ mod tests {
                 }
             }
 
-            let blank_groth_params =
-                PoRCompound::<Tree>::groth_params(Some(rng), &public_params.vanilla_params)
-                    .expect("failed to generate groth params");
+            let blank_groth_params = PoRCompound::<ResTree<Tree>>::groth_params(
+                Some(rng),
+                &public_params.vanilla_params,
+            )
+            .expect("failed to generate groth params");
 
             let proof = PoRCompound::prove(
                 &public_params,
@@ -1104,7 +1195,6 @@ mod tests {
 
             assert_eq!(cs.get_input(0, "ONE"), Fr::one(), "wrong input 0");
 
-            dbg!(&expected_inputs, &cs.get_input(1, "base/path/input 0"));
             assert_eq!(
                 cs.get_input(1, "base/path/input 0"),
                 expected_inputs[0],
