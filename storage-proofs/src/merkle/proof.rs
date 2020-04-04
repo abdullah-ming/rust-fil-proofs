@@ -93,6 +93,10 @@ pub trait MerkleProofTrait:
     fn expected_len(&self, leaves: usize) -> usize {
         compound_path_length::<Self::Arity, Self::SubTreeArity, Self::TopTreeArity>(leaves)
     }
+
+    /// Test only method to break a valid proof.
+    #[cfg(test)]
+    fn break_me(&mut self, leaf: <Self::Hasher as Hasher>::Domain);
 }
 
 pub fn base_path_length<A: Unsigned, B: Unsigned, C: Unsigned>(leaves: usize) -> usize {
@@ -291,6 +295,22 @@ impl<
 
     fn proves_challenge(&self, challenge: usize) -> bool {
         forward_method!(self.data, proves_challenge, challenge)
+    }
+
+    /// Test only method to break a valid proof.
+    #[cfg(test)]
+    fn break_me(&mut self, leaf: H::Domain) {
+        match self.data {
+            ProofData::Single(ref mut proof) => {
+                proof.leaf = leaf;
+            }
+            ProofData::Sub(ref mut proof) => {
+                proof.leaf = leaf;
+            }
+            ProofData::Top(ref mut proof) => {
+                proof.leaf = leaf;
+            }
+        }
     }
 }
 
