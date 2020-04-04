@@ -240,29 +240,19 @@ pub struct PoRCompound<Tree: MerkleTreeTrait> {
     _tree: PhantomData<Tree>,
 }
 
-pub fn challenge_into_auth_path_bits<U: typenum::Unsigned>(
-    challenge: usize,
-    leaves: usize,
-) -> Vec<bool> {
-    let height = graph_height::<U>(leaves);
+fn to_bits(bit_count: u32, n: usize) -> Vec<bool> {
+    (0..bit_count).map(|i| (n >> i) & 1 == 1).collect()
+}
 
-    let mut bits = Vec::new();
-    let mut n = challenge;
-    let arity = U::to_usize();
-    assert_eq!(1, arity.count_ones());
-    let log_arity = arity.trailing_zeros() as usize;
+pub fn challenge_into_auth_path_bits(arity: usize, challenge: usize, leaves: usize) -> Vec<bool> {
+    if arity == 0 {
+        Vec::new()
+    } else {
+        assert_eq!(1, arity.count_ones());
 
-    for _ in 0..height - 1 {
-        // Calculate the index
-        let index = n % arity;
-        n /= arity;
-
-        // turn the index into bits
-        for i in 0..log_arity {
-            bits.push((index >> i) & 1 == 1);
-        }
+        let bit_count = leaves.trailing_zeros() + 1;
+        to_bits(bit_count, challenge)
     }
-    bits
 }
 
 impl<C: Circuit<Bls12>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheableParameters<C, P>
@@ -320,87 +310,33 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
         pub_params: &<PoR<Tree> as ProofScheme<'a>>::PublicParams,
         _k: Option<usize>,
     ) -> Result<Vec<Fr>> {
-        let mut inputs = Vec::new();
-
-        let get_challenge_index = |challenge: usize, arity: usize, height: usize| {
-            assert_eq!(1, arity.count_ones());
-
-            let mut leaves = 1;
-            for _ in 0..height {
-                leaves *= arity;
-            }
-            let (index, reduced_challenge) = (challenge % leaves, challenge / leaves);
-            (index, reduced_challenge)
-        };
-
         let height = compound_path_length::<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>(
             pub_params.leaves,
         );
-        if Tree::TopTreeArity::to_usize() > 0 {
-            let top_leaves = Tree::TopTreeArity::to_usize();
-            let sub_leaves = Tree::SubTreeArity::to_usize();
-            let base_leaves = pub_params.leaves / top_leaves / sub_leaves;
 
-            let (base_challenge, reduced_challenge) =
-                get_challenge_index(pub_inputs.challenge, Tree::Arity::to_usize(), height - 2);
-            let (sub_challenge, reduced_challenge) =
-                get_challenge_index(reduced_challenge, Tree::SubTreeArity::to_usize(), 1);
-            let (top_challenge, _) =
-                get_challenge_index(reduced_challenge, Tree::TopTreeArity::to_usize(), 1);
+        let top_arity = Tree::TopTreeArity::to_usize();
+        let sub_arity = Tree::SubTreeArity::to_usize();
+        let base_arity = Tree::Arity::to_usize();
 
-            {
-                let base_bits =
-                    challenge_into_auth_path_bits::<Tree::Arity>(base_challenge, base_leaves);
-                let base_packed = multipack::compute_multipacking::<Bls12>(&base_bits);
-                inputs.extend(base_packed);
-            }
+        let top_height = (top_arity > 0) as usize;
+        let sub_height = (sub_arity > 0) as usize;
+        let base_height = height - top_height - sub_height;
 
-            {
-                let sub_bits =
-                    challenge_into_auth_path_bits::<Tree::SubTreeArity>(sub_challenge, sub_leaves);
-                let sub_packed = multipack::compute_multipacking::<Bls12>(&sub_bits);
-                inputs.extend(sub_packed);
-            }
+        let mut inputs = Vec::new();
+        let mut challenge_acc = pub_inputs.challenge;
 
-            {
-                let top_bits =
-                    challenge_into_auth_path_bits::<Tree::TopTreeArity>(top_challenge, top_leaves);
-                let top_packed = multipack::compute_multipacking::<Bls12>(&top_bits);
-                inputs.extend(top_packed);
-            }
-        } else if Tree::SubTreeArity::to_usize() > 0 {
-            let sub_leaves = Tree::SubTreeArity::to_usize();
-            let base_leaves = pub_params.leaves / sub_leaves;
+        let mut reduce_and_process_challenge = |arity: usize, height: usize, leaves_in: usize| {
+            let leaves = usize::pow(arity, height as u32);
 
-            let (base_challenge, reduced_challenge) =
-                get_challenge_index(pub_inputs.challenge, Tree::Arity::to_usize(), height - 1);
-            let (sub_challenge, _) =
-                get_challenge_index(reduced_challenge, Tree::SubTreeArity::to_usize(), 1);
+            let bits = challenge_into_auth_path_bits(arity, challenge_acc % leaves, leaves_in);
+            inputs.extend(multipack::compute_multipacking::<Bls12>(&bits));
 
-            {
-                let base_bits =
-                    challenge_into_auth_path_bits::<Tree::Arity>(base_challenge, base_leaves);
-                let base_packed = multipack::compute_multipacking::<Bls12>(&base_bits);
-                inputs.extend(base_packed);
-            }
+            challenge_acc = challenge_acc / leaves;
+        };
 
-            {
-                let sub_bits =
-                    challenge_into_auth_path_bits::<Tree::SubTreeArity>(sub_challenge, sub_leaves);
-                let sub_packed = multipack::compute_multipacking::<Bls12>(&sub_bits);
-                inputs.extend(sub_packed);
-            }
-        } else {
-            let base_challenge = pub_inputs.challenge;
-            let base_leaves = pub_params.leaves;
-
-            {
-                let base_bits =
-                    challenge_into_auth_path_bits::<Tree::Arity>(base_challenge, base_leaves);
-                let base_packed = multipack::compute_multipacking::<Bls12>(&base_bits);
-                inputs.extend(base_packed);
-            }
-        }
+        reduce_and_process_challenge(base_arity, base_height, pub_params.leaves);
+        reduce_and_process_challenge(sub_arity, sub_height, sub_arity);
+        reduce_and_process_challenge(top_arity, top_height, top_arity);
 
         if let Some(commitment) = pub_inputs.commitment {
             ensure!(!pub_params.private, "Params must be public");
@@ -1216,7 +1152,8 @@ mod tests {
                 "wrong number of constraints"
             );
 
-            let auth_path_bits = challenge_into_auth_path_bits::<Tree::Arity>(
+            let auth_path_bits = challenge_into_auth_path_bits(
+                <Tree::Arity>::to_usize(),
                 pub_inputs.challenge,
                 pub_params.leaves,
             );
