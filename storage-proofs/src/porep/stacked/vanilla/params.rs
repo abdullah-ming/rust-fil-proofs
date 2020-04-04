@@ -484,11 +484,8 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
         let tree_d_store: DiskStore<G::Domain> =
             DiskStore::new_from_disk(tree_d_size, BINARY_ARITY, &t_aux.tree_d_config)
                 .context("tree_d_store")?;
-        let tree_d = BinaryMerkleTree::<G>::from_data_store(
-            tree_d_store,
-            tree_d_leafs,
-        )
-        .context("tree_d")?;
+        let tree_d =
+            BinaryMerkleTree::<G>::from_data_store(tree_d_store, tree_d_leafs).context("tree_d")?;
 
         let tree_count = get_base_tree_count::<Tree>();
         let configs = split_config(t_aux.tree_c_config.clone(), tree_count)?;
@@ -506,7 +503,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
 
         let (configs, replica_paths) = split_config_and_replica(
             t_aux.tree_r_last_config.clone(),
-            replica_path.to_path_buf(),
+            replica_path.clone(),
             tree_count,
         )?;
         let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;

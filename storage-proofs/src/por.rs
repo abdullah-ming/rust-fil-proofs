@@ -158,10 +158,8 @@ mod tests {
 
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{
-        Blake2sHasher, HashFunction, PedersenHasher, PoseidonHasher, Sha256Hasher,
-    };
-    use crate::merkle::{DiskStore, MerkleProof, MerkleProofTrait, MerkleTreeWrapper};
+    use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
+    use crate::merkle::{DiskStore, MerkleProofTrait, MerkleTreeWrapper};
     use crate::util::data_at_node;
 
     fn test_merklepor<Tree: MerkleTreeTrait>() {

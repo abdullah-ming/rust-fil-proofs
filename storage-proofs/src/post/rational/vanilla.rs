@@ -293,10 +293,7 @@ mod tests {
 
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{
-        Blake2sHasher, PedersenHasher, PoseidonArity, PoseidonHasher, Sha256Hasher,
-    };
-    use crate::merkle::MerkleProof;
+    use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
 
     fn test_rational_post<H: 'static + Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
@@ -404,102 +401,6 @@ mod tests {
     #[test]
     fn rational_post_poseidon() {
         test_rational_post::<PoseidonHasher>();
-    }
-
-    // Construct a proof that satisfies a cursory validation:
-    // Data and proof are minimally consistent.
-    // Proof root matches that requested in public inputs.
-    // However, note that data has no relationship to anything,
-    // and proof path does not actually prove that data was in the tree corresponding to expected root.
-    fn make_bogus_proof<H: Hasher, U: 'static + PoseidonArity>(
-        _pub_inputs: &PublicInputs<H::Domain>,
-        rng: &mut XorShiftRng,
-    ) -> MerkleProof<H, U> {
-        let bogus_leaf: H::Domain = H::Domain::random(rng);
-
-        todo!();
-        // make_proof_for_test::<MerkleProof<H, U, typenum::U0, typenum::U0>>(
-        //     pub_inputs.comm_rs[0],
-        //     bogus_leaf,
-        //     vec![(vec![bogus_leaf; U::to_usize() - 1], 1)],
-        // )
-    }
-
-    fn test_rational_post_validates<H: 'static + Hasher>() {
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
-
-        let leaves = 64;
-        let sector_size = leaves as u64 * 32;
-        let challenges_count = 2;
-        let pub_params = PublicParams {
-            sector_size,
-            challenges_count,
-        };
-
-        let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
-            .collect();
-
-        let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree: BinaryMerkleTree<H> = graph.merkle_tree(None, data.as_slice()).unwrap();
-        let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
-
-        let faults = OrderedSectorSet::new();
-        let mut sectors = OrderedSectorSet::new();
-        sectors.insert(0.into());
-        sectors.insert(1.into());
-
-        let challenges =
-            derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
-        let comm_r_lasts = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
-
-        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| H::Domain::random(rng)).collect();
-
-        let comm_rs: Vec<H::Domain> = comm_cs
-            .iter()
-            .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| H::Function::hash2(comm_c, comm_r_last))
-            .collect();
-
-        let pub_inputs = PublicInputs::<H::Domain> {
-            challenges: &challenges,
-            faults: &faults,
-            comm_rs: &comm_rs,
-        };
-
-        let bad_proof = Proof {
-            inclusion_proofs: vec![
-                make_bogus_proof::<H, typenum::U2>(&pub_inputs, rng),
-                make_bogus_proof::<H, typenum::U2>(&pub_inputs, rng),
-            ],
-            comm_cs,
-        };
-
-        let verified = RationalPoSt::verify(&pub_params, &pub_inputs, &bad_proof)
-            .expect("verification failed");
-
-        // A bad proof should not be verified!
-        assert!(!verified);
-    }
-
-    #[test]
-    fn rational_post_actually_validates_sha256() {
-        test_rational_post_validates::<Sha256Hasher>();
-    }
-
-    #[test]
-    fn rational_post_actually_validates_blake2s() {
-        test_rational_post_validates::<Blake2sHasher>();
-    }
-
-    #[test]
-    fn rational_post_actually_validates_pedersen() {
-        test_rational_post_validates::<PedersenHasher>();
-    }
-
-    #[test]
-    fn rational_post_actually_validates_poseidon() {
-        test_rational_post_validates::<PoseidonHasher>();
     }
 
     fn test_rational_post_validates_challenge_identity<H: 'static + Hasher>() {

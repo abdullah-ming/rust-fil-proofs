@@ -423,9 +423,9 @@ mod tests {
     use super::*;
     use std::mem;
 
-    use merkletree::hash::Hashable;
+    // use merkletree::hash::Hashable;
 
-    use crate::merkle::BinaryMerkleTree;
+    // use crate::merkle::BinaryMerkleTree;
 
     // These two tests need to be rewritten not to use from_data, or from_data needs to be fixed to not hash its contents
     // before it is restored to MerkleTreeTrait.

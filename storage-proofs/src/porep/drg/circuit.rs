@@ -339,183 +339,180 @@ mod tests {
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
-    //FIXME: ADD BACK IN
-    /*
-        #[test]
-        fn drgporep_input_circuit_with_bls12_381() {
-            let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+    #[test]
+    fn drgporep_input_circuit_with_bls12_381() {
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-            let nodes = 16;
-            let degree = BASE_DEGREE;
-            let challenge = 2;
+        let nodes = 16;
+        let degree = BASE_DEGREE;
+        let challenge = 2;
 
-            let replica_id: Fr = Fr::random(rng);
+        let replica_id: Fr = Fr::random(rng);
 
-            let mut data: Vec<u8> = (0..nodes)
-                .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
-                .collect();
+        let mut data: Vec<u8> = (0..nodes)
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+            .collect();
 
-            // TODO: don't clone everything
-            let original_data = data.clone();
-            let data_node: Option<Fr> = Some(
-                bytes_into_fr(
-                    data_at_node(&original_data, challenge).expect("failed to read original data"),
-                )
-                .unwrap(),
-            );
-
-            let sp = drg::SetupParams {
-                drg: drg::DrgParams {
-                    nodes,
-                    degree,
-                    expansion_degree: 0,
-                    seed: new_seed(),
-                },
-                private: false,
-                challenges_count: 1,
-            };
-
-            // MT for original data is always named tree-d, and it will be
-            // referenced later in the process as such.
-            let cache_dir = tempfile::tempdir().unwrap();
-            let config = StoreConfig::new(
-                cache_dir.path(),
-                CacheKey::CommDTree.to_string(),
-                StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
-            );
-
-            // Generate a replica path.
-            let temp_dir = tempdir::TempDir::new("drgporep-input-circuit-with-bls12-381").unwrap();
-            let temp_path = temp_dir.path();
-            let replica_path = temp_path.join("replica-path");
-
-            let pp = drg::DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp)
-                .expect("failed to create drgporep setup");
-            let (tau, aux) = drg::DrgPoRep::<PedersenHasher, _>::replicate(
-                &pp,
-                &replica_id.into(),
-                (&mut data[..]).into(),
-                None,
-                config,
-                replica_path.clone(),
+        // TODO: don't clone everything
+        let original_data = data.clone();
+        let data_node: Option<Fr> = Some(
+            bytes_into_fr(
+                data_at_node(&original_data, challenge).expect("failed to read original data"),
             )
-            .expect("failed to replicate");
+            .unwrap(),
+        );
 
-            let pub_inputs = drg::PublicInputs {
-                replica_id: Some(replica_id.into()),
-                challenges: vec![challenge],
-                tau: Some(tau.into()),
-            };
+        let sp = drg::SetupParams {
+            drg: drg::DrgParams {
+                nodes,
+                degree,
+                expansion_degree: 0,
+                seed: new_seed(),
+            },
+            private: false,
+            challenges_count: 1,
+        };
 
-            let priv_inputs = drg::PrivateInputs::<PedersenHasher> {
-                tree_d: &aux.tree_d,
-                tree_r: &aux.tree_r,
-                tree_r_config_levels: StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
-            };
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        let cache_dir = tempfile::tempdir().unwrap();
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
+        );
 
-            let proof_nc = drg::DrgPoRep::<PedersenHasher, _>::prove(&pp, &pub_inputs, &priv_inputs)
-                .expect("failed to prove");
+        // Generate a replica path.
+        let temp_dir = tempdir::TempDir::new("drgporep-input-circuit-with-bls12-381").unwrap();
+        let temp_path = temp_dir.path();
+        let replica_path = temp_path.join("replica-path");
 
-            assert!(
-                drg::DrgPoRep::<PedersenHasher, _>::verify(&pp, &pub_inputs, &proof_nc)
-                    .expect("failed to verify"),
-                "failed to verify (non circuit)"
+        let pp = drg::DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp)
+            .expect("failed to create drgporep setup");
+        let (tau, aux) = drg::DrgPoRep::<PedersenHasher, _>::replicate(
+            &pp,
+            &replica_id.into(),
+            (&mut data[..]).into(),
+            None,
+            config,
+            replica_path.clone(),
+        )
+        .expect("failed to replicate");
+
+        let pub_inputs = drg::PublicInputs {
+            replica_id: Some(replica_id.into()),
+            challenges: vec![challenge],
+            tau: Some(tau.into()),
+        };
+
+        let priv_inputs = drg::PrivateInputs::<PedersenHasher> {
+            tree_d: &aux.tree_d,
+            tree_r: &aux.tree_r,
+            tree_r_config_levels: StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
+        };
+
+        let proof_nc = drg::DrgPoRep::<PedersenHasher, _>::prove(&pp, &pub_inputs, &priv_inputs)
+            .expect("failed to prove");
+
+        assert!(
+            drg::DrgPoRep::<PedersenHasher, _>::verify(&pp, &pub_inputs, &proof_nc)
+                .expect("failed to verify"),
+            "failed to verify (non circuit)"
+        );
+
+        let replica_node: Option<Fr> = Some(proof_nc.replica_nodes[0].data.into());
+
+        let replica_node_path = proof_nc.replica_nodes[0].proof.as_options();
+        let replica_root = Root::Val(Some(proof_nc.replica_root.into()));
+        let replica_parents = proof_nc
+            .replica_parents
+            .iter()
+            .map(|v| {
+                v.iter()
+                    .map(|(_, parent)| Some(parent.data.into()))
+                    .collect()
+            })
+            .collect();
+        let replica_parents_paths: Vec<_> = proof_nc
+            .replica_parents
+            .iter()
+            .map(|v| {
+                v.iter()
+                    .map(|(_, parent)| parent.proof.as_options())
+                    .collect()
+            })
+            .collect();
+
+        let data_node_path = proof_nc.nodes[0].proof.as_options();
+        let data_root = Root::Val(Some(proof_nc.data_root.into()));
+        let replica_id = Some(replica_id);
+
+        assert!(
+            proof_nc.nodes[0].proof.validate(challenge),
+            "failed to verify data commitment"
+        );
+        assert!(
+            proof_nc.nodes[0]
+                .proof
+                .validate_data(data_node.unwrap().into()),
+            "failed to verify data commitment with data"
+        );
+
+        let mut cs = TestConstraintSystem::<Bls12>::new();
+        DrgPoRepCircuit::<PedersenHasher>::synthesize(
+            cs.namespace(|| "drgporep"),
+            vec![replica_node],
+            vec![replica_node_path],
+            replica_root,
+            replica_parents,
+            replica_parents_paths,
+            vec![data_node],
+            vec![data_node_path],
+            data_root,
+            replica_id,
+            false,
+        )
+        .expect("failed to synthesize circuit");
+
+        if !cs.is_satisfied() {
+            println!(
+                "failed to satisfy: {:?}",
+                cs.which_is_unsatisfied().unwrap()
             );
+        }
 
-            let replica_node: Option<Fr> = Some(proof_nc.replica_nodes[0].data.into());
+        assert!(cs.is_satisfied(), "constraints not satisfied");
+        assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 149607, "wrong number of constraints");
 
-            let replica_node_path = proof_nc.replica_nodes[0].proof.as_options();
-            let replica_root = Root::Val(Some(proof_nc.replica_root.into()));
-            let replica_parents = proof_nc
-                .replica_parents
-                .iter()
-                .map(|v| {
-                    v.iter()
-                        .map(|(_, parent)| Some(parent.data.into()))
-                        .collect()
-                })
-                .collect();
-            let replica_parents_paths: Vec<_> = proof_nc
-                .replica_parents
-                .iter()
-                .map(|v| {
-                    v.iter()
-                        .map(|(_, parent)| parent.proof.as_options())
-                        .collect()
-                })
-                .collect();
+        assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
-            let data_node_path = proof_nc.nodes[0].proof.as_options();
-            let data_root = Root::Val(Some(proof_nc.data_root.into()));
-            let replica_id = Some(replica_id);
+        assert_eq!(
+            cs.get_input(1, "drgporep/replica_id/input variable"),
+            replica_id.unwrap()
+        );
 
-            assert!(
-                proof_nc.nodes[0].proof.validate(challenge),
-                "failed to verify data commitment"
-            );
-            assert!(
-                proof_nc.nodes[0]
-                    .proof
-                    .validate_data(data_node.unwrap().into()),
-                "failed to verify data commitment with data"
-            );
-
-            let mut cs = TestConstraintSystem::<Bls12>::new();
-            DrgPoRepCircuit::<PedersenHasher>::synthesize(
-                cs.namespace(|| "drgporep"),
-                vec![replica_node],
-                vec![replica_node_path],
-                replica_root,
-                replica_parents,
-                replica_parents_paths,
-                vec![data_node],
-                vec![data_node_path],
-                data_root,
-                replica_id,
-                false,
-            )
-            .expect("failed to synthesize circuit");
-
-            if !cs.is_satisfied() {
-                println!(
-                    "failed to satisfy: {:?}",
-                    cs.which_is_unsatisfied().unwrap()
-                );
-            }
-
-            assert!(cs.is_satisfied(), "constraints not satisfied");
-            assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-            assert_eq!(cs.num_constraints(), 149607, "wrong number of constraints");
-
-            assert_eq!(cs.get_input(0, "ONE"), Fr::one());
-
-            assert_eq!(
-                cs.get_input(1, "drgporep/replica_id/input variable"),
-                replica_id.unwrap()
-            );
-
-            let generated_inputs =
+        let generated_inputs =
                 <DrgPoRepCompound<_, _> as compound_proof::CompoundProof<_, _>>::generate_public_inputs(
                     &pub_inputs,
                     &pp,
                     None,
                 )
                 .unwrap();
-            let expected_inputs = cs.get_inputs();
+        let expected_inputs = cs.get_inputs();
 
-            for ((input, label), generated_input) in
-                expected_inputs.iter().skip(1).zip(generated_inputs.iter())
-            {
-                assert_eq!(input, generated_input, "{}", label);
-            }
-
-            assert_eq!(
-                generated_inputs.len(),
-                expected_inputs.len() - 1,
-                "inputs are not the same length"
-            );
+        for ((input, label), generated_input) in
+            expected_inputs.iter().skip(1).zip(generated_inputs.iter())
+        {
+            assert_eq!(input, generated_input, "{}", label);
         }
-    */
+
+        assert_eq!(
+            generated_inputs.len(),
+            expected_inputs.len() - 1,
+            "inputs are not the same length"
+        );
+    }
 
     #[test]
     fn drgporep_input_circuit_num_constraints() {

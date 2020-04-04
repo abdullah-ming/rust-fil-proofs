@@ -323,7 +323,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
         let mut inputs = Vec::new();
 
         let get_challenge_index = |challenge: usize, arity: usize, height: usize| {
-            let n = challenge;
             assert_eq!(1, arity.count_ones());
 
             let mut leaves = 1;
@@ -517,7 +516,6 @@ mod tests {
 
     use bellperson::gadgets::multipack;
     use ff::Field;
-    use merkletree::merkle::{is_merkle_tree_size_valid, FromIndexedParallelIterator, MerkleTree};
     use merkletree::store::VecStore;
     use pretty_assertions::assert_eq;
     use rand::{Rng, SeedableRng};
@@ -528,10 +526,9 @@ mod tests {
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{
-        Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonArity, PoseidonDomain,
-        PoseidonHasher, Sha256Hasher,
+        Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher,
     };
-    use crate::merkle::{BinaryMerkleTree, DiskStore, MerkleProofTrait, MerkleTreeWrapper};
+    use crate::merkle::{MerkleProofTrait, MerkleTreeWrapper};
     use crate::por;
     use crate::proof::NoRequirements;
     use crate::proof::ProofScheme;

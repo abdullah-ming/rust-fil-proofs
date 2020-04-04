@@ -96,8 +96,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                 // Derive the set of challenges we are proving over.
                 let challenges = pub_inputs.challenges(layer_challenges, graph_size, Some(k));
-                let base_tree_leafs =
-                    sector_size as usize / std::mem::size_of::<<Tree::Hasher as Hasher>::Domain>();
 
                 // Stacked commitment specifics
                 challenges
@@ -151,7 +149,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         let comm_r_last_proof = if t_aux.tree_r_last_config_levels == 0 {
                             t_aux.tree_r_last.gen_proof(challenge)
                         } else {
-                            t_aux.tree_r_last.gen_cached_proof(challenge, t_aux.tree_r_last_config_levels)
+                            t_aux
+                                .tree_r_last
+                                .gen_cached_proof(challenge, t_aux.tree_r_last_config_levels)
                         }?;
 
                         // Labeling Proofs Layer 1..l
@@ -402,11 +402,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         assert_eq!(replica_paths.len(), tree_count);
 
         // Store and persist encoded replica data.
-        for i in 0..tree_count {
-            let mut f = OpenOptions::new()
-                .write(true)
-                .create(true)
-                .open(&replica_paths[i])?;
+        for path in replica_paths {
+            let mut f = OpenOptions::new().write(true).create(true).open(path)?;
 
             // Only write the replica's base layer of leaf data.
             trace!("Writing replica data for {} nodes {}-{}", leafs, start, end);
@@ -491,7 +488,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
             let mut trees = Vec::with_capacity(tree_count);
 
-            for i in 0..tree_count {
+            for (i, config) in configs.iter().enumerate() {
                 let mut hashes: Vec<<Tree::Hasher as Hasher>::Domain> =
                     vec![<Tree::Hasher as Hasher>::Domain::default(); nodes_count];
 
@@ -533,8 +530,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     typenum::U0,
                     typenum::U0,
                 >::from_par_iter_with_config(
-                    hashes.into_par_iter(),
-                    configs[i].clone(),
+                    hashes.into_par_iter(), config.clone()
                 )?);
             }
 
@@ -583,7 +579,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             let mut start = 0;
             let mut end = size / tree_count;
 
-            for i in 0..tree_count {
+            for (i, config) in configs.iter().enumerate() {
                 let encoded_data = last_layer_labels
                     .read_range(start..end)?
                     .into_par_iter()
@@ -603,7 +599,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     });
 
                 info!("building base tree_r_last {}/{}", i + 1, tree_count);
-                trees.push(LCTree::<Tree::Hasher, Tree::Arity, typenum::U0, typenum::U0>::from_par_iter_with_config(encoded_data, configs[i].clone())?);
+                trees.push(LCTree::<Tree::Hasher, Tree::Arity, typenum::U0, typenum::U0>::from_par_iter_with_config(encoded_data, config.clone())?);
 
                 start = end;
                 end += size / tree_count;
@@ -705,7 +701,7 @@ mod tests {
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
-    use crate::merkle::{MerkleTreeTrait};
+    use crate::merkle::MerkleTreeTrait;
     use crate::porep::stacked::{PrivateInputs, SetupParams, EXP_DEGREE};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
@@ -834,10 +830,22 @@ mod tests {
     fn prove_verify_fixed(n: usize) {
         let challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
 
-        test_prove_verify::<DiskTree<PedersenHasher, typenum::U8, typenum::U0, typenum::U0>>(n, challenges.clone());
-        test_prove_verify::<DiskTree<Sha256Hasher, typenum::U8, typenum::U0, typenum::U0>>(n, challenges.clone());
-        test_prove_verify::<DiskTree<Blake2sHasher, typenum::U8, typenum::U0, typenum::U0>>(n, challenges.clone());
-        test_prove_verify::<DiskTree<PoseidonHasher, typenum::U8, typenum::U0, typenum::U0>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<PedersenHasher, typenum::U8, typenum::U0, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
+        test_prove_verify::<DiskTree<Sha256Hasher, typenum::U8, typenum::U0, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
+        test_prove_verify::<DiskTree<Blake2sHasher, typenum::U8, typenum::U0, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
+        test_prove_verify::<DiskTree<PoseidonHasher, typenum::U8, typenum::U0, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
 
         // FIXME: Add more tree shapes
     }
@@ -961,7 +969,10 @@ mod tests {
 
         // When this fails, the call to setup should panic, but seems to actually hang (i.e. neither return nor panic) for some reason.
         // When working as designed, the call to setup returns without error.
-        let _pp = StackedDrg::<DiskTree<PedersenHasher, typenum::U8, typenum::U0, typenum::U0>, Blake2sHasher>::setup(&sp)
-            .expect("setup failed");
+        let _pp = StackedDrg::<
+            DiskTree<PedersenHasher, typenum::U8, typenum::U0, typenum::U0>,
+            Blake2sHasher,
+        >::setup(&sp)
+        .expect("setup failed");
     }
 }

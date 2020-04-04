@@ -180,7 +180,7 @@ impl<H: Hasher, Arity: PoseidonArity> InclusionPath<H, Arity> {
     /// Calculate the root of this path, given the leaf as input.
     pub fn root(&self, leaf: H::Domain) -> H::Domain {
         let mut a = H::Function::default();
-        let root = (0..self.path.len()).fold(leaf, |h, height| {
+        (0..self.path.len()).fold(leaf, |h, height| {
             a.reset();
 
             let index = self.path[height].index;
@@ -188,9 +188,7 @@ impl<H: Hasher, Arity: PoseidonArity> InclusionPath<H, Arity> {
             nodes.insert(index, h);
 
             a.multi_node(&nodes, height)
-        });
-
-        root
+        })
     }
 
     pub fn len(&self) -> usize {
@@ -362,11 +360,7 @@ struct SingleProof<H: Hasher, Arity: PoseidonArity> {
 
 impl<H: Hasher, Arity: PoseidonArity> SingleProof<H, Arity> {
     pub fn new(path: InclusionPath<H, Arity>, root: H::Domain, leaf: H::Domain) -> Self {
-        SingleProof {
-            root,
-            leaf,
-            path: path.into(),
-        }
+        SingleProof { root, leaf, path }
     }
 }
 
@@ -503,8 +497,8 @@ fn proof_to_single<H: Hasher, Arity: PoseidonArity, TargetArity: PoseidonArity>(
     sub_root: Option<H::Domain>,
 ) -> SingleProof<H, TargetArity> {
     let root = proof.root();
-    let leaf = if sub_root.is_some() {
-        sub_root.unwrap()
+    let leaf = if let Some(sub_root) = sub_root {
+        sub_root
     } else {
         proof.item()
     };
@@ -517,8 +511,8 @@ fn proof_to_single<H: Hasher, Arity: PoseidonArity, TargetArity: PoseidonArity>(
 /// index 0 and base proofs start at index 1 (skipping the leaf at the
 /// front)
 fn extract_path<H: Hasher, Arity: PoseidonArity>(
-    lemma: &Vec<H::Domain>,
-    path: &Vec<usize>,
+    lemma: &[H::Domain],
+    path: &[usize],
     lemma_start_index: usize,
 ) -> InclusionPath<H, Arity> {
     let path = lemma[lemma_start_index..lemma.len() - 1]

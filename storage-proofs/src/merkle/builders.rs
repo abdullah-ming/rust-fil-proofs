@@ -31,13 +31,10 @@ pub fn create_disk_tree<Tree: MerkleTreeTrait>(
             "Invalid top arity specified without sub arity"
         );
 
-        DiskTree::from_sub_tree_store_configs(
-            base_tree_leafs,
-            configs,
-        )
+        DiskTree::from_sub_tree_store_configs(base_tree_leafs, configs)
     } else if Tree::SubTreeArity::to_usize() > 0 {
         ensure!(
-            configs.len() > 0,
+            !configs.is_empty(),
             "Cannot create sub-tree with a single tree config"
         );
 
@@ -64,25 +61,22 @@ pub fn create_lc_tree<Tree: MerkleTreeTrait>(
             "Invalid top arity specified without sub arity"
         );
 
-        LCTree::from_sub_tree_store_configs_and_replicas(
-            base_tree_leafs,
-            configs,
-            replica_paths,
-        )
+        LCTree::from_sub_tree_store_configs_and_replicas(base_tree_leafs, configs, replica_paths)
     } else if Tree::SubTreeArity::to_usize() > 0 {
         ensure!(
-            configs.len() > 0,
+            !configs.is_empty(),
             "Cannot create sub-tree with a single tree config"
         );
 
-        LCTree::from_store_configs_and_replicas(
-            base_tree_leafs,
-            configs,
-            replica_paths,
-        )
+        LCTree::from_store_configs_and_replicas(base_tree_leafs, configs, replica_paths)
     } else {
         ensure!(configs.len() == 1, "Invalid tree-shape specified");
-        let store = LCStore::new_from_disk_with_reader(base_tree_len, Tree::Arity::to_usize(), &configs[0], ExternalReader::new_from_path(&replica_paths[0])?)?;
+        let store = LCStore::new_from_disk_with_reader(
+            base_tree_len,
+            Tree::Arity::to_usize(),
+            &configs[0],
+            ExternalReader::new_from_path(&replica_paths[0])?,
+        )?;
 
         LCTree::from_data_store(store, base_tree_leafs)
     }
@@ -232,7 +226,7 @@ pub fn open_lcmerkle_tree<
 // the original config is not modified.
 pub fn split_config(config: StoreConfig, count: usize) -> Result<Vec<StoreConfig>> {
     if count == 1 {
-        return Ok(vec![config.clone()]);
+        return Ok(vec![config]);
     }
 
     let mut configs = Vec::with_capacity(count);
@@ -286,7 +280,7 @@ pub fn split_config_and_replica(
     count: usize,
 ) -> Result<(Vec<StoreConfig>, Vec<PathBuf>)> {
     if count == 1 {
-        return Ok((vec![config.clone()], vec![replica_path]));
+        return Ok((vec![config], vec![replica_path]));
     }
 
     let mut configs = Vec::with_capacity(count);
