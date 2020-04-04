@@ -353,17 +353,19 @@ where
     if let Some(ref temp_path) = temp_path {
         let id: u64 = rng.gen();
         let replica_path = temp_path.join(format!("replica-path-{}", id));
-        let mut f = std::fs::File::create(&replica_path).unwrap();
-        f.write_all(&data).unwrap();
         let config = StoreConfig::new(
             &temp_path,
             format!("test-lc-tree-{}", id),
-            Tree::Arity::to_usize(),
+            StoreConfig::default_cached_above_base_layer(nodes, Tree::Arity::to_usize()),
         );
 
         let mut tree =
             MerkleTreeWrapper::try_from_iter_with_config(elements.iter().map(|v| (Ok(*v))), config)
                 .unwrap();
+
+        // Write out the replica data.
+        let mut f = std::fs::File::create(&replica_path).unwrap();
+        f.write_all(&data).unwrap();
 
         {
             // Beware: evil dynamic downcasting RUST MAGIC down below.
