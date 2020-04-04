@@ -63,9 +63,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         assert!(pub_inputs.tau.is_some());
         assert_eq!(pub_inputs.tau.as_ref().unwrap().comm_d, t_aux.tree_d.root());
 
-        let sector_size =
-            (graph.size() * std::mem::size_of::<<Tree::Hasher as Hasher>::Domain>()) as u64;
-
         let get_drg_parents_columns = |x: usize| -> Result<Vec<Column<Tree::Hasher>>> {
             let base_degree = graph.base_graph().degree();
 
@@ -146,13 +143,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                         // Final replica layer openings
                         trace!("final replica layer openings");
-                        let comm_r_last_proof = if t_aux.tree_r_last_config_levels == 0 {
-                            t_aux.tree_r_last.gen_proof(challenge)
-                        } else {
-                            t_aux
-                                .tree_r_last
-                                .gen_cached_proof(challenge, t_aux.tree_r_last_config_levels)
-                        }?;
+                        let comm_r_last_proof = t_aux
+                            .tree_r_last
+                            .gen_cached_proof(challenge, t_aux.tree_r_last_config_levels)?;
+
+                        // For development and debugging.
+                        assert!(comm_r_last_proof.validate(challenge));
 
                         // Labeling Proofs Layer 1..l
                         let mut labeling_proofs = HashMap::with_capacity(layers);
@@ -398,7 +394,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let mut start = 0;
         let mut end = leafs * NODE_SIZE;
 
-        //ensure!(replica_paths.len() == tree_count, "Replica path and tree count mis-match");
         assert_eq!(replica_paths.len(), tree_count);
 
         // Store and persist encoded replica data.
@@ -409,7 +404,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             trace!("Writing replica data for {} nodes {}-{}", leafs, start, end);
             f.write_all(&data.as_ref()[start..end])?;
             start = end;
-            end += leafs;
+            end += leafs * NODE_SIZE;
         }
 
         Ok(())
@@ -440,8 +435,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             is_merkle_tree_size_valid(nodes_count, BINARY_ARITY)
         );
         trace!(
-            "is_merkle_tree_size_valid({}, OCT_ARITY) = {}",
+            "is_merkle_tree_size_valid({}, {}) = {}",
             nodes_count,
+            Tree::Arity::to_usize(),
             is_merkle_tree_size_valid(nodes_count, Tree::Arity::to_usize())
         );
         assert!(is_merkle_tree_size_valid(nodes_count, BINARY_ARITY));
@@ -487,7 +483,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             info!("Building column hashes");
 
             let mut trees = Vec::with_capacity(tree_count);
-
             for (i, config) in configs.iter().enumerate() {
                 let mut hashes: Vec<<Tree::Hasher as Hasher>::Domain> =
                     vec![<Tree::Hasher as Hasher>::Domain::default(); nodes_count];
@@ -511,8 +506,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 let data: Vec<_> = (1..=layers)
                                     .map(|layer| {
                                         let store = labels.labels_for_layer(layer);
-                                        let el: <Tree::Hasher as Hasher>::Domain =
-                                            store.read_at(j + chunk * chunk_size).unwrap();
+                                        let el: <Tree::Hasher as Hasher>::Domain = store
+                                            .read_at((i * nodes_count) + j + chunk * chunk_size)
+                                            .unwrap();
                                         el.into()
                                     })
                                     .collect();
@@ -718,7 +714,7 @@ mod tests {
     }
 
     #[test]
-    fn extract_all_pedersen_2() {
+    fn extract_all_pedersen_8() {
         test_extract_all::<DiskTree<PedersenHasher, typenum::U8, typenum::U0, typenum::U0>>();
     }
 
@@ -733,17 +729,37 @@ mod tests {
     }
 
     #[test]
-    fn extract_all_sha256() {
+    fn extract_all_sha256_8() {
         test_extract_all::<DiskTree<Sha256Hasher, typenum::U8, typenum::U0, typenum::U0>>();
     }
 
     #[test]
-    fn extract_all_blake2s() {
+    fn extract_all_sha256_8_8() {
+        test_extract_all::<DiskTree<Sha256Hasher, typenum::U8, typenum::U8, typenum::U0>>();
+    }
+
+    #[test]
+    fn extract_all_sha256_8_8_2() {
+        test_extract_all::<DiskTree<Sha256Hasher, typenum::U8, typenum::U8, typenum::U2>>();
+    }
+
+    #[test]
+    fn extract_all_blake2s_8() {
         test_extract_all::<DiskTree<Blake2sHasher, typenum::U8, typenum::U0, typenum::U0>>();
     }
 
     #[test]
-    fn extract_all_poseidon_2() {
+    fn extract_all_blake2s_8_8() {
+        test_extract_all::<DiskTree<Blake2sHasher, typenum::U8, typenum::U8, typenum::U0>>();
+    }
+
+    #[test]
+    fn extract_all_blake2s_8_8_2() {
+        test_extract_all::<DiskTree<Blake2sHasher, typenum::U8, typenum::U8, typenum::U2>>();
+    }
+
+    #[test]
+    fn extract_all_poseidon_8() {
         test_extract_all::<DiskTree<PoseidonHasher, typenum::U8, typenum::U0, typenum::U0>>();
     }
 
@@ -830,24 +846,109 @@ mod tests {
     fn prove_verify_fixed(n: usize) {
         let challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
 
-        test_prove_verify::<DiskTree<PedersenHasher, typenum::U8, typenum::U0, typenum::U0>>(
+        test_prove_verify::<DiskTree<PedersenHasher, typenum::U4, typenum::U0, typenum::U0>>(
             n,
             challenges.clone(),
         );
-        test_prove_verify::<DiskTree<Sha256Hasher, typenum::U8, typenum::U0, typenum::U0>>(
+        test_prove_verify::<DiskTree<PedersenHasher, typenum::U4, typenum::U2, typenum::U0>>(
             n,
             challenges.clone(),
         );
-        test_prove_verify::<DiskTree<Blake2sHasher, typenum::U8, typenum::U0, typenum::U0>>(
-            n,
-            challenges.clone(),
-        );
-        test_prove_verify::<DiskTree<PoseidonHasher, typenum::U8, typenum::U0, typenum::U0>>(
+        test_prove_verify::<DiskTree<PedersenHasher, typenum::U4, typenum::U8, typenum::U2>>(
             n,
             challenges.clone(),
         );
 
-        // FIXME: Add more tree shapes
+        test_prove_verify::<DiskTree<PedersenHasher, typenum::U8, typenum::U0, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
+        test_prove_verify::<DiskTree<PedersenHasher, typenum::U8, typenum::U2, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
+        test_prove_verify::<DiskTree<PedersenHasher, typenum::U8, typenum::U8, typenum::U2>>(
+            n,
+            challenges.clone(),
+        );
+
+        test_prove_verify::<DiskTree<Sha256Hasher, typenum::U8, typenum::U0, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
+        test_prove_verify::<DiskTree<Sha256Hasher, typenum::U8, typenum::U2, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
+        test_prove_verify::<DiskTree<Sha256Hasher, typenum::U8, typenum::U8, typenum::U2>>(
+            n,
+            challenges.clone(),
+        );
+
+        test_prove_verify::<DiskTree<Sha256Hasher, typenum::U4, typenum::U0, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
+        test_prove_verify::<DiskTree<Sha256Hasher, typenum::U4, typenum::U2, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
+        test_prove_verify::<DiskTree<Sha256Hasher, typenum::U4, typenum::U8, typenum::U2>>(
+            n,
+            challenges.clone(),
+        );
+
+        test_prove_verify::<DiskTree<Blake2sHasher, typenum::U4, typenum::U0, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
+        test_prove_verify::<DiskTree<Blake2sHasher, typenum::U4, typenum::U2, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
+        test_prove_verify::<DiskTree<Blake2sHasher, typenum::U4, typenum::U8, typenum::U2>>(
+            n,
+            challenges.clone(),
+        );
+
+        test_prove_verify::<DiskTree<Blake2sHasher, typenum::U8, typenum::U0, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
+        test_prove_verify::<DiskTree<Blake2sHasher, typenum::U8, typenum::U2, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
+        test_prove_verify::<DiskTree<Blake2sHasher, typenum::U8, typenum::U8, typenum::U2>>(
+            n,
+            challenges.clone(),
+        );
+
+        test_prove_verify::<DiskTree<PoseidonHasher, typenum::U4, typenum::U0, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
+        test_prove_verify::<DiskTree<PoseidonHasher, typenum::U4, typenum::U2, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
+        test_prove_verify::<DiskTree<PoseidonHasher, typenum::U4, typenum::U8, typenum::U2>>(
+            n,
+            challenges.clone(),
+        );
+
+        test_prove_verify::<DiskTree<PoseidonHasher, typenum::U8, typenum::U0, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
+        test_prove_verify::<DiskTree<PoseidonHasher, typenum::U8, typenum::U2, typenum::U0>>(
+            n,
+            challenges.clone(),
+        );
+        test_prove_verify::<DiskTree<PoseidonHasher, typenum::U8, typenum::U8, typenum::U2>>(
+            n,
+            challenges.clone(),
+        );
     }
 
     fn test_prove_verify<Tree: 'static + MerkleTreeTrait>(n: usize, challenges: LayerChallenges) {
@@ -856,6 +957,7 @@ mod tests {
         //     .start(log::LevelFilter::Trace)
         //     .ok();
 
+        let n = n * get_base_tree_count::<Tree>();
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let degree = BASE_DEGREE;

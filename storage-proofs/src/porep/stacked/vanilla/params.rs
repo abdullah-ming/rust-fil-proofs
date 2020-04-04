@@ -513,10 +513,12 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
         let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;
         let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
         trace!(
-            "Instantiating tree r last [count {}] with size {} and arity {}",
+            "Instantiating tree r last [count {}] with size {} and arity {}, {}, {}",
             tree_count,
             tree_r_last_size,
             Tree::Arity::to_usize(),
+            Tree::SubTreeArity::to_usize(),
+            Tree::TopTreeArity::to_usize(),
         );
         let tree_r_last = create_lc_tree::<
             LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
