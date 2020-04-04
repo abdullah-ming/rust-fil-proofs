@@ -14,6 +14,7 @@ use crate::error::Result;
 use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, OctLCMerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
+use crate::porep::stacked::OCT_ARITY;
 use crate::proof::ProofScheme;
 use crate::sector::*;
 use crate::util::NODE_SIZE;
