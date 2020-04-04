@@ -115,10 +115,10 @@ impl<H: Hasher> SectorProof<H> {
     }
 
     pub fn comm_r_last(&self) -> H::Domain {
-        *self.inclusion_proofs[0].root()
+        self.inclusion_proofs[0].root()
     }
 
-    pub fn commitments(&self) -> Vec<&H::Domain> {
+    pub fn commitments(&self) -> Vec<H::Domain> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::root)
@@ -397,7 +397,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
 
                 if AsRef::<[u8]>::as_ref(&<Tree::Hasher as Hasher>::Function::hash2(
                     &comm_c,
-                    comm_r_last,
+                    &comm_r_last,
                 )) != AsRef::<[u8]>::as_ref(comm_r)
                 {
                     return Ok(false);

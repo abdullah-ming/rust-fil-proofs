@@ -237,8 +237,8 @@ impl<H: Hasher> Proof<H> {
         nodes: Vec<DataProof<H, typenum::U2>>,
     ) -> Proof<H> {
         Proof {
-            data_root: *nodes[0].proof.root(),
-            replica_root: *replica_nodes[0].proof.root(),
+            data_root: nodes[0].proof.root(),
+            replica_root: replica_nodes[0].proof.root(),
             replica_nodes,
             replica_parents,
             nodes,
@@ -249,8 +249,8 @@ impl<H: Hasher> Proof<H> {
 impl<'a, H: Hasher> From<&'a Proof<H>> for Proof<H> {
     fn from(p: &Proof<H>) -> Proof<H> {
         Proof {
-            data_root: *p.nodes[0].proof.root(),
-            replica_root: *p.replica_nodes[0].proof.root(),
+            data_root: p.nodes[0].proof.root(),
+            replica_root: p.replica_nodes[0].proof.root(),
             replica_nodes: p.replica_nodes.clone(),
             replica_parents: p.replica_parents.clone(),
             nodes: p.nodes.clone(),

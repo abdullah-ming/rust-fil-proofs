@@ -121,7 +121,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for PoR<Tree> {
         {
             // This was verify_proof_meta.
             let commitments_match = match pub_inputs.commitment {
-                Some(ref commitment) => commitment == proof.proof.root(),
+                Some(ref commitment) => commitment == &proof.proof.root(),
                 None => true,
             };
 

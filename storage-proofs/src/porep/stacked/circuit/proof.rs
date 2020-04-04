@@ -291,18 +291,16 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             "Cannot create a circuit with no vanilla proofs"
         );
 
-        let comm_r_last = *vanilla_proof[0].comm_r_last();
-        let comm_c = *vanilla_proof[0].comm_c();
+        let comm_r_last = vanilla_proof[0].comm_r_last();
+        let comm_c = vanilla_proof[0].comm_c();
 
         // ensure consistency
         ensure!(
-            vanilla_proof
-                .iter()
-                .all(|p| p.comm_r_last() == &comm_r_last),
+            vanilla_proof.iter().all(|p| p.comm_r_last() == comm_r_last),
             "inconsistent comm_r_lasts"
         );
         ensure!(
-            vanilla_proof.iter().all(|p| p.comm_c() == &comm_c),
+            vanilla_proof.iter().all(|p| p.comm_c() == comm_c),
             "inconsistent comm_cs"
         );
 

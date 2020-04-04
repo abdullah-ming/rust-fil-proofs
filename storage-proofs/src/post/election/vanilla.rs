@@ -115,10 +115,10 @@ impl<H: Hasher> Proof<H> {
     }
 
     pub fn comm_r_last(&self) -> H::Domain {
-        *self.inclusion_proofs[0].root()
+        self.inclusion_proofs[0].root()
     }
 
-    pub fn commitments(&self) -> Vec<&H::Domain> {
+    pub fn commitments(&self) -> Vec<H::Domain> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::root)
@@ -398,7 +398,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
         let comm_c = proof.comm_c;
         let comm_r = &pub_inputs.comm_r;
 
-        if AsRef::<[u8]>::as_ref(&H::Function::hash2(&comm_c, comm_r_last))
+        if AsRef::<[u8]>::as_ref(&H::Function::hash2(&comm_c, &comm_r_last))
             != AsRef::<[u8]>::as_ref(comm_r)
         {
             return Ok(false);

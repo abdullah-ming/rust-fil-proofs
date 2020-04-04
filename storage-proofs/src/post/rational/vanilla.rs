@@ -79,7 +79,7 @@ impl<H: Hasher> Proof<H> {
             .collect()
     }
 
-    pub fn commitments(&self) -> Vec<&H::Domain> {
+    pub fn commitments(&self) -> Vec<H::Domain> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::root)

@@ -105,7 +105,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
             let actual_comm_r: <Tree::Hasher as Hasher>::Domain = {
                 let comm_c = proofs[0].comm_c();
                 let comm_r_last = proofs[0].comm_r_last();
-                <Tree::Hasher as Hasher>::Function::hash2(comm_c, comm_r_last)
+                <Tree::Hasher as Hasher>::Function::hash2(&comm_c, &comm_r_last)
             };
 
             if expected_comm_r != &actual_comm_r {

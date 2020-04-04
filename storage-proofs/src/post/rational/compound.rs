@@ -90,7 +90,7 @@ where
         let comm_r_lasts: Vec<_> = vanilla_proof
             .commitments()
             .into_iter()
-            .map(|c| Some((*c).into()))
+            .map(|c| Some(c.into()))
             .collect();
 
         let leafs: Vec<_> = vanilla_proof

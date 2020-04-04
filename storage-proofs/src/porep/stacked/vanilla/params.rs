@@ -179,11 +179,11 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Clone for Proof<Tree, G> {
 }
 
 impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
-    pub fn comm_r_last(&self) -> &<Tree::Hasher as Hasher>::Domain {
+    pub fn comm_r_last(&self) -> <Tree::Hasher as Hasher>::Domain {
         self.comm_r_last_proof.root()
     }
 
-    pub fn comm_c(&self) -> &<Tree::Hasher as Hasher>::Domain {
+    pub fn comm_c(&self) -> <Tree::Hasher as Hasher>::Domain {
         self.replica_column_proofs.c_x.root()
     }
 
@@ -206,7 +206,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
         check!(self.comm_d_proofs.proves_challenge(challenge));
 
         if let Some(ref tau) = pub_inputs.tau {
-            check_eq!(self.comm_d_proofs.root(), &tau.comm_d);
+            check_eq!(&self.comm_d_proofs.root(), &tau.comm_d);
         } else {
             return false;
         }
