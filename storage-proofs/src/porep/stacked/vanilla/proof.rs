@@ -148,7 +148,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                         // Final replica layer openings
                         trace!("final replica layer openings");
-                        let comm_r_last_proof = t_aux.tree_r_last.gen_proof(challenge)?;
+                        let comm_r_last_proof = if t_aux.tree_r_last_config_levels == 0 {
+                            t_aux.tree_r_last.gen_proof(challenge)
+                        } else {
+                            t_aux.tree_r_last.gen_cached_proof(challenge, t_aux.tree_r_last_config_levels)
+                        }?;
 
                         // Labeling Proofs Layer 1..l
                         let mut labeling_proofs = HashMap::with_capacity(layers);
@@ -392,7 +396,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         use std::io::prelude::*;
 
         let mut start = 0;
-        let mut end = leafs;
+        let mut end = leafs * NODE_SIZE;
 
         //ensure!(replica_paths.len() == tree_count, "Replica path and tree count mis-match");
         assert_eq!(replica_paths.len(), tree_count);
@@ -441,12 +445,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         trace!(
             "is_merkle_tree_size_valid({}, OCT_ARITY) = {}",
             nodes_count,
-            is_merkle_tree_size_valid(nodes_count, Tree::SubTreeArity::to_usize())
+            is_merkle_tree_size_valid(nodes_count, Tree::Arity::to_usize())
         );
         assert!(is_merkle_tree_size_valid(nodes_count, BINARY_ARITY));
         assert!(is_merkle_tree_size_valid(
             nodes_count,
-            Tree::SubTreeArity::to_usize()
+            Tree::Arity::to_usize()
         ));
 
         let layers = layer_challenges.layers();
@@ -701,7 +705,7 @@ mod tests {
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
-    use crate::merkle::{BinaryMerkleTree, MerkleTreeTrait};
+    use crate::merkle::{MerkleTreeTrait};
     use crate::porep::stacked::{PrivateInputs, SetupParams, EXP_DEGREE};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
@@ -719,42 +723,42 @@ mod tests {
 
     #[test]
     fn extract_all_pedersen_2() {
-        test_extract_all::<BinaryMerkleTree<PedersenHasher>>();
+        test_extract_all::<DiskTree<PedersenHasher, typenum::U8, typenum::U0, typenum::U0>>();
     }
 
     #[test]
     fn extract_all_pedersen_8_2() {
-        test_extract_all::<OctSubMerkleTree<PedersenHasher>>();
+        test_extract_all::<DiskTree<PedersenHasher, typenum::U8, typenum::U2, typenum::U0>>();
     }
 
     #[test]
     fn extract_all_pedersen_8_8_2() {
-        test_extract_all::<OctTopMerkleTree<PedersenHasher>>();
+        test_extract_all::<DiskTree<PedersenHasher, typenum::U8, typenum::U8, typenum::U2>>();
     }
 
     #[test]
     fn extract_all_sha256() {
-        test_extract_all::<BinaryMerkleTree<Sha256Hasher>>();
+        test_extract_all::<DiskTree<Sha256Hasher, typenum::U8, typenum::U0, typenum::U0>>();
     }
 
     #[test]
     fn extract_all_blake2s() {
-        test_extract_all::<BinaryMerkleTree<Blake2sHasher>>();
+        test_extract_all::<DiskTree<Blake2sHasher, typenum::U8, typenum::U0, typenum::U0>>();
     }
 
     #[test]
     fn extract_all_poseidon_2() {
-        test_extract_all::<BinaryMerkleTree<PoseidonHasher>>();
+        test_extract_all::<DiskTree<PoseidonHasher, typenum::U8, typenum::U0, typenum::U0>>();
     }
 
     #[test]
     fn extract_all_poseidon_8_2() {
-        test_extract_all::<OctSubMerkleTree<PoseidonHasher>>();
+        test_extract_all::<DiskTree<PoseidonHasher, typenum::U8, typenum::U2, typenum::U0>>();
     }
 
     #[test]
     fn extract_all_poseidon_8_8_2() {
-        test_extract_all::<OctTopMerkleTree<PoseidonHasher>>();
+        test_extract_all::<DiskTree<PoseidonHasher, typenum::U8, typenum::U8, typenum::U2>>();
     }
 
     fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
@@ -765,13 +769,7 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let replica_id: <Tree::Hasher as Hasher>::Domain =
             <Tree::Hasher as Hasher>::Domain::random(rng);
-        let nodes = if Tree::TopTreeArity::to_usize() > 0 {
-            64 * Tree::SubTreeArity::to_usize() * Tree::TopTreeArity::to_usize()
-        } else if Tree::SubTreeArity::to_usize() > 0 {
-            64 * Tree::SubTreeArity::to_usize()
-        } else {
-            64
-        };
+        let nodes = 64 * get_base_tree_count::<Tree>();
 
         let data: Vec<u8> = (0..nodes)
             .flat_map(|_| {
@@ -836,10 +834,12 @@ mod tests {
     fn prove_verify_fixed(n: usize) {
         let challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
 
-        test_prove_verify::<BinaryMerkleTree<PedersenHasher>>(n, challenges.clone());
-        test_prove_verify::<BinaryMerkleTree<Sha256Hasher>>(n, challenges.clone());
-        test_prove_verify::<BinaryMerkleTree<Blake2sHasher>>(n, challenges.clone());
-        test_prove_verify::<BinaryMerkleTree<PoseidonHasher>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<PedersenHasher, typenum::U8, typenum::U0, typenum::U0>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<Sha256Hasher, typenum::U8, typenum::U0, typenum::U0>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<Blake2sHasher, typenum::U8, typenum::U0, typenum::U0>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<PoseidonHasher, typenum::U8, typenum::U0, typenum::U0>>(n, challenges.clone());
+
+        // FIXME: Add more tree shapes
     }
 
     fn test_prove_verify<Tree: 'static + MerkleTreeTrait>(n: usize, challenges: LayerChallenges) {
@@ -961,7 +961,7 @@ mod tests {
 
         // When this fails, the call to setup should panic, but seems to actually hang (i.e. neither return nor panic) for some reason.
         // When working as designed, the call to setup returns without error.
-        let _pp = StackedDrg::<BinaryMerkleTree<PedersenHasher>, Blake2sHasher>::setup(&sp)
+        let _pp = StackedDrg::<DiskTree<PedersenHasher, typenum::U8, typenum::U0, typenum::U0>, Blake2sHasher>::setup(&sp)
             .expect("setup failed");
     }
 }

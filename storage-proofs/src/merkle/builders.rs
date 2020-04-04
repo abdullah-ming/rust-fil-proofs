@@ -31,22 +31,22 @@ pub fn create_disk_tree<Tree: MerkleTreeTrait>(
             "Invalid top arity specified without sub arity"
         );
 
-        Ok(DiskTree::from_sub_tree_store_configs(
+        DiskTree::from_sub_tree_store_configs(
             base_tree_leafs,
             configs,
-        )?)
+        )
     } else if Tree::SubTreeArity::to_usize() > 0 {
         ensure!(
             configs.len() > 0,
             "Cannot create sub-tree with a single tree config"
         );
 
-        Ok(DiskTree::from_store_configs(base_tree_leafs, configs)?)
+        DiskTree::from_store_configs(base_tree_leafs, configs)
     } else {
         ensure!(configs.len() == 1, "Invalid tree-shape specified");
         let store = DiskStore::new_from_disk(base_tree_len, Tree::Arity::to_usize(), &configs[0])?;
 
-        Ok(DiskTree::from_data_store(store, base_tree_leafs)?)
+        DiskTree::from_data_store(store, base_tree_leafs)
     }
 }
 
@@ -64,30 +64,27 @@ pub fn create_lc_tree<Tree: MerkleTreeTrait>(
             "Invalid top arity specified without sub arity"
         );
 
-        Ok(LCTree::from_sub_tree_store_configs_and_replicas(
+        LCTree::from_sub_tree_store_configs_and_replicas(
             base_tree_leafs,
             configs,
             replica_paths,
-        )?)
+        )
     } else if Tree::SubTreeArity::to_usize() > 0 {
         ensure!(
             configs.len() > 0,
             "Cannot create sub-tree with a single tree config"
         );
 
-        Ok(LCTree::from_store_configs_and_replicas(
+        LCTree::from_store_configs_and_replicas(
             base_tree_leafs,
             configs,
             replica_paths,
-        )?)
+        )
     } else {
         ensure!(configs.len() == 1, "Invalid tree-shape specified");
-        let store = LCStore::new_from_disk(base_tree_len, Tree::Arity::to_usize(), &configs[0])?;
+        let store = LCStore::new_from_disk_with_reader(base_tree_len, Tree::Arity::to_usize(), &configs[0], ExternalReader::new_from_path(&replica_paths[0])?)?;
 
-        let mut tree = LCTree::from_data_store(store, base_tree_leafs)?;
-        tree.set_external_reader_path(&replica_paths[0])?;
-
-        Ok(tree)
+        LCTree::from_data_store(store, base_tree_leafs)
     }
 }
 
